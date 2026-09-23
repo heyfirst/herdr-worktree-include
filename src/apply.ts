@@ -1,7 +1,9 @@
 import { constants as fsConstants } from "node:fs";
-import { copyFile, lstat, mkdir, readlink, symlink } from "node:fs/promises";
+import { copyFile, lstat, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { plan, type SkipReason } from "./plan";
+import { groupByIgnoredDir, namesDirectory, patternKind, positivePatterns } from "./reach";
 
 const INCLUDE_FILE = ".worktreeinclude";
 const EXIT_OK = 0;
@@ -67,9 +69,74 @@ async function copyOne(source: string, target: string, path: string): Promise<Fi
 
 async function matchedCandidates(source: string, includePath: string): Promise<string[]> {
   const included = await runGit(["ls-files", "--others", "--ignored", "-z", `--exclude-from=${includePath}`], source);
-  if (!included || included.length === 0) return [];
+  const ignored = await onlyGitIgnored(source, splitNull(included));
+  return dropUnreachedIgnoredDirs(source, includePath, ignored);
+}
 
-  const ignored = await runGit(["check-ignore", "-z", "--stdin"], source, included, [
+// why: matches Claude Code 2.1.281 as measured, not its docs; see CONTEXT.md
+async function dropUnreachedIgnoredDirs(source: string, includePath: string, candidates: string[]): Promise<string[]> {
+  const groups = groupByIgnoredDir(candidates, await whollyIgnoredDirs(source));
+  if (!groups.keys().some((dir) => dir !== null)) return candidates;
+
+  const patterns = positivePatterns((await readFile(includePath, "utf8")).split("\n"));
+  const emptyRepo = await mkdtemp(join(tmpdir(), "worktree-include-"));
+  try {
+    await runGit(["init", "-q"], emptyRepo);
+    const kept: string[] = [];
+    for (const [dir, paths] of groups) {
+      if (dir === null || (await isReached({ source, emptyRepo, dir, patterns }))) kept.push(...paths);
+    }
+    return kept;
+  } finally {
+    await rm(emptyRepo, { recursive: true, force: true });
+  }
+}
+
+type Reach = { source: string; emptyRepo: string; dir: string; patterns: string[] };
+
+async function isReached({ source, emptyRepo, dir, patterns }: Reach): Promise<boolean> {
+  for (const line of patterns) {
+    if (await reaches({ source, emptyRepo, dir, line })) return true;
+  }
+  return false;
+}
+
+async function reaches({ source, emptyRepo, dir, line }: Omit<Reach, "patterns"> & { line: string }): Promise<boolean> {
+  switch (patternKind(line)) {
+    case "globstar":
+      return namesDirectory(line, dir) || dirMatches(emptyRepo, dir, line);
+    case "anchored":
+      return (await dirMatches(emptyRepo, dir, line)) || (await matchesInside(source, dir, line));
+    case "anywhere":
+      return dirMatches(emptyRepo, dir, line);
+  }
+}
+
+async function matchesInside(source: string, dir: string, line: string): Promise<boolean> {
+  const listed = await runGit(["ls-files", "--others", "--ignored", "-z", `--exclude=${line}`, "--", dir], source);
+  return splitNull(listed).length > 0;
+}
+
+// why: the source repo's .gitignore would match too; an empty repo tests this pattern alone
+async function dirMatches(emptyRepo: string, dir: string, line: string): Promise<boolean> {
+  const pattern = join(emptyRepo, "pattern");
+  await writeFile(pattern, line);
+  const code = await gitExitCode(
+    ["-c", `core.excludesFile=${pattern}`, "check-ignore", "--no-index", "-q", dir],
+    emptyRepo,
+  );
+  return code === EXIT_OK;
+}
+
+async function whollyIgnoredDirs(source: string): Promise<string[]> {
+  const listed = await runGit(["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"], source);
+  const untrackedOrIgnoredDirs = splitNull(listed).filter((entry) => entry.endsWith("/"));
+  return onlyGitIgnored(source, untrackedOrIgnoredDirs);
+}
+
+async function onlyGitIgnored(source: string, paths: string[]): Promise<string[]> {
+  if (paths.length === 0) return [];
+  const ignored = await runGit(["check-ignore", "-z", "--stdin"], source, Buffer.from(paths.join("\0")), [
     EXIT_OK,
     CHECK_IGNORE_NONE_IGNORED,
   ]);
@@ -132,4 +199,8 @@ async function runGit(
   });
   const stdout = Buffer.from(await new Response(proc.stdout).arrayBuffer());
   return okCodes.includes(await proc.exited) ? stdout : null;
+}
+
+async function gitExitCode(args: string[], cwd: string): Promise<number> {
+  return Bun.spawn(["git", ...args], { cwd, stdin: "ignore", stdout: "ignore", stderr: "ignore" }).exited;
 }
