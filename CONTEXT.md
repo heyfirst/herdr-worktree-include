@@ -209,10 +209,10 @@ main checkout (source)                     new worktree (target)
 
 ## Where Bun fits
 
-| Bun does                                                                | Where                                  |
-| ----------------------------------------------------------------------- | -------------------------------------- |
-| Runs the plugin: `bun dist/main.js`                                     | `herdr-plugin.toml`                    |
-| Spawns git and reads its output                                         | `Bun.spawn` in `runGit`, `gitExitCode` |
-| Bundles `src/` and valibot into one file                                | `bun run build`                        |
-| Runs the tests against real git repos in a temp dir                     | `bun test`                             |
-| Runs the manifest's own command, as herdr would, in the end-to-end test | `src/e2e.test.ts`                      |
+| Bun does                                                                | Where                   |
+| ----------------------------------------------------------------------- | ----------------------- |
+| Runs the plugin: `bun dist/main.js`                                     | `herdr-plugin.toml`     |
+| Spawns git and reads its output                                         | `Bun.spawn` in `runGit` |
+| Bundles `src/` and valibot into one file                                | `bun run build`         |
+| Runs the tests against real git repos in a temp dir                     | `bun test`              |
+| Runs the manifest's own command, as herdr would, in the end-to-end test | `src/e2e.test.ts`       |
