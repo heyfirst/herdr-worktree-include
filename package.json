@@ -14,7 +14,7 @@
     "lint": "oxlint --type-aware",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "check": "tsc --noEmit && oxlint --type-aware && oxfmt --check && bun test && bun run build",
+    "check": "tsc --noEmit && oxlint --type-aware && oxfmt --check && bun run build && bun test",
     "build": "bun build src/main.ts --target bun --minify --outfile dist/main.js"
   },
   "dependencies": {

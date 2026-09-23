@@ -133,6 +133,96 @@ describe("apply", () => {
     expect(copied(outcome)).toEqual([".env"]);
   });
 
+  type ReachCase = { name: string; gitignore: string; include: string; paths: string[]; copies: string[] };
+
+  test.each<ReachCase>([
+    {
+      name: "does not reach in when the pattern does not name the directory",
+      gitignore: "vendor/\nconfig.json\n",
+      include: "**/config.json\n",
+      paths: ["vendor/lib/config.json", "config.json"],
+      copies: ["config.json"],
+    },
+    {
+      name: "reaches in when the first name after **/ is in the directory path",
+      gitignore: ".claude/\n",
+      include: "**/.claude/skills/*.md\n",
+      paths: [".claude/skills/a.md", ".claude/other.md"],
+      copies: [".claude/skills/a.md"],
+    },
+    {
+      name: "reaches in when the directory itself matches the pattern",
+      gitignore: "tmp/\n",
+      include: "**/tm*\n",
+      paths: ["tmp/a.txt", "tmp/deep/b.txt"],
+      copies: ["tmp/a.txt", "tmp/deep/b.txt"],
+    },
+    {
+      name: "a pattern without **/ still reaches in",
+      gitignore: "vendor/\n",
+      include: "vendor/**/config.json\n",
+      paths: ["vendor/lib/config.json"],
+      copies: ["vendor/lib/config.json"],
+    },
+    {
+      name: "negation still applies inside the directory",
+      gitignore: ".claude/\n",
+      include: "**/.claude/skills/*.md\n!**/.claude/skills/secret.md\n",
+      paths: [".claude/skills/a.md", ".claude/skills/secret.md"],
+      copies: [".claude/skills/a.md"],
+    },
+    {
+      name: "a pattern with no slash does not reach in",
+      gitignore: "node_modules/\n.env\n",
+      include: ".env\n",
+      paths: ["node_modules/pkg/.env", ".env"],
+      copies: [".env"],
+    },
+    {
+      name: "a no-slash glob does not reach in",
+      gitignore: "docs-cache/\n",
+      include: "*.md\n",
+      paths: ["docs-cache/a.md"],
+      copies: [],
+    },
+    {
+      name: "a pattern naming the directory itself reaches in",
+      gitignore: "vendor/\n",
+      include: "vendor/\n",
+      paths: ["vendor/lib/x.json"],
+      copies: ["vendor/lib/x.json"],
+    },
+    {
+      name: "a root path reaches in",
+      gitignore: ".claude/local/\n",
+      include: ".claude/local/settings.json\n",
+      paths: [".claude/local/settings.json"],
+      copies: [".claude/local/settings.json"],
+    },
+    {
+      name: "once reached, every pattern applies inside",
+      gitignore: "vendor/\n",
+      include: "vendor/**/keep.json\n**/config.json\n",
+      paths: ["vendor/lib/keep.json", "vendor/lib/config.json"],
+      copies: ["vendor/lib/config.json", "vendor/lib/keep.json"],
+    },
+    {
+      name: "a nested ignored directory is held to the same rule",
+      gitignore: "node_modules/\n.env\n",
+      include: "**/.env\n",
+      paths: ["apps/web/node_modules/pkg/.env", "apps/web/.env"],
+      copies: ["apps/web/.env"],
+    },
+  ])("wholly ignored directory, as Claude Code 2.1.281 does: $name", async ({ gitignore, include, paths, copies }) => {
+    await write(join(main, ".gitignore"), gitignore);
+    await write(join(main, ".worktreeinclude"), include);
+    await commitInitial([".gitignore", ".worktreeinclude"]);
+    await addWorktree();
+    for (const path of paths) await write(join(main, path), "x\n");
+
+    expect(copied(await apply(main, worktree))).toEqual(copies);
+  });
+
   test("existing target file is untouched", async () => {
     await write(join(main, ".gitignore"), ".env\n");
     await write(join(main, ".worktreeinclude"), ".env\n");

@@ -81,11 +81,9 @@ describe("plan", () => {
     },
   ];
 
-  for (const { name, facts, copy, skipped } of cases) {
-    test(name, () => {
-      const planned = plan(facts);
-      expect(planned.flatMap((p) => (p.step === "copy" ? [p.path] : []))).toEqual(copy);
-      expect(planned.flatMap((p) => (p.step === "skip" ? [{ path: p.path, reason: p.reason }] : []))).toEqual(skipped);
-    });
-  }
+  test.each(cases)("$name", ({ facts, copy, skipped }) => {
+    const planned = plan(facts);
+    expect(planned.flatMap((p) => (p.step === "copy" ? [p.path] : []))).toEqual(copy);
+    expect(planned.flatMap((p) => (p.step === "skip" ? [{ path: p.path, reason: p.reason }] : []))).toEqual(skipped);
+  });
 });
