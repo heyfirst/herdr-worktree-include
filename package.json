@@ -1,5 +1,5 @@
 {
-  "name": "worktree-include",
+  "name": "herdr-worktree-include",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,5 +13,10 @@
     "oxlint": "^1.85.0",
     "oxlint-tsgolint": "^7.0.2002",
     "typescript": "^7.0.2"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heyfirst/herdr-worktree-include.git"
   }
 }
