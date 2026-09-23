@@ -1,11 +1,18 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["dist/"],
   "plugins": ["typescript"],
   "rules": {
     "typescript/no-explicit-any": "error",
     "typescript/no-restricted-types": [
       "error",
-      { "types": { "unknown": { "message": "use Json or a narrowed type" } } }
+      {
+        "types": {
+          "unknown": {
+            "message": "parse with a valibot schema or narrow the type"
+          }
+        }
+      }
     ],
     "typescript/no-unsafe-assignment": "error",
     "typescript/no-unsafe-argument": "error",

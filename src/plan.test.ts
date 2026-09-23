@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { plan, type Facts, type SkipReason } from "../src/plan";
+import { plan, type Facts, type SkipReason } from "./plan";
 
 type Skip = { path: string; reason: SkipReason };
 
@@ -85,9 +85,7 @@ describe("plan", () => {
     test(name, () => {
       const planned = plan(facts);
       expect(planned.flatMap((p) => (p.step === "copy" ? [p.path] : []))).toEqual(copy);
-      expect(planned.flatMap((p) => (p.step === "skip" ? [{ path: p.path, reason: p.reason }] : []))).toEqual(
-        skipped
-      );
+      expect(planned.flatMap((p) => (p.step === "skip" ? [{ path: p.path, reason: p.reason }] : []))).toEqual(skipped);
     });
   }
 });

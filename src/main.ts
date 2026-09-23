@@ -1,11 +1,15 @@
+import * as v from "valibot";
 import { apply, mainWorktreeOf, type Outcome } from "./apply";
-import { field, parseJson, type Json } from "./json";
 
 type Mode = "event" | "apply";
 
+const Path = v.pipe(v.string(), v.minLength(1));
+const WorktreeEvent = v.object({ data: v.object({ worktree: v.object({ path: Path }) }) });
+const ApplyContext = v.object({ worktree: v.object({ checkout_path: Path }) });
+
 await run().then(
   (outcome) => console.log(JSON.stringify(outcome)),
-  (error) => console.error(`worktree-include: ${error instanceof Error ? error.stack : String(error)}`)
+  (error) => console.error(`worktree-include: ${error instanceof Error ? error.stack : String(error)}`),
 );
 process.exit(0);
 
@@ -26,18 +30,20 @@ function parseMode(arg: string | undefined): Mode | null {
 function resolveTarget(mode: Mode | null, argvPath: string | undefined): string | null {
   switch (mode) {
     case "event":
-      return nonEmpty(field(field(field(parseJson(process.env.HERDR_PLUGIN_EVENT_JSON), "data"), "worktree"), "path"));
+      return parseEnv(WorktreeEvent, process.env.HERDR_PLUGIN_EVENT_JSON)?.data.worktree.path ?? null;
     case "apply":
-      return checkoutPath(parseJson(process.env.HERDR_PLUGIN_CONTEXT_JSON)) ?? argvPath ?? null;
+      return parseEnv(ApplyContext, process.env.HERDR_PLUGIN_CONTEXT_JSON)?.worktree.checkout_path ?? argvPath ?? null;
     case null:
       return null;
   }
 }
 
-function checkoutPath(scope: Json | undefined): string | null {
-  return nonEmpty(field(field(scope, "worktree"), "checkout_path"));
-}
-
-function nonEmpty(value: Json | undefined): string | null {
-  return typeof value === "string" && value.length > 0 ? value : null;
+function parseEnv<T>(schema: v.GenericSchema<T>, raw: string | undefined): T | null {
+  if (!raw) return null;
+  try {
+    const result = v.safeParse(schema, JSON.parse(raw));
+    return result.success ? result.output : null;
+  } catch {
+    return null;
+  }
 }
