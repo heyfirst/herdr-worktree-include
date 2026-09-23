@@ -2,6 +2,7 @@ import { constants as fsConstants } from "node:fs";
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import { assertExhausted } from "./assert";
 import { plan, type SkipReason } from "./plan";
 import { groupByIgnoredDir, namesDirectory, patternKind, positivePatterns } from "./reach";
 
@@ -15,7 +16,7 @@ export type FileOutcome =
   | { tag: "failed"; path: string; error: string };
 
 export type Outcome =
-  | { tag: "no-target" }
+  | { tag: "no-target"; reason: string }
   | { tag: "no-source"; target: string }
   | { tag: "is-main"; path: string }
   | { tag: "no-manifest"; source: string }
@@ -45,9 +46,11 @@ export async function apply(sourceRoot: string, targetRoot: string): Promise<Out
   return { tag: "applied", source, target, files };
 }
 
-export async function mainWorktreeOf(path: string): Promise<string | null> {
+export type MainWorktree = { tag: "found"; path: string } | { tag: "none" };
+
+export async function mainWorktreeOf(path: string): Promise<MainWorktree> {
   const [first] = await worktreeRoots(path);
-  return first ?? null;
+  return first ? { tag: "found", path: first } : { tag: "none" };
 }
 
 async function copyOne(source: string, target: string, path: string): Promise<FileOutcome> {
@@ -69,22 +72,22 @@ async function copyOne(source: string, target: string, path: string): Promise<Fi
 
 async function matchedCandidates(source: string, includePath: string): Promise<string[]> {
   const included = await runGit(["ls-files", "--others", "--ignored", "-z", `--exclude-from=${includePath}`], source);
-  const ignored = await onlyGitIgnored(source, splitNull(included));
+  const ignored = await onlyGitIgnored(source, nulSeparated(included));
   return dropUnreachedIgnoredDirs(source, includePath, ignored);
 }
 
 // why: matches Claude Code 2.1.281 as measured, not its docs; see CONTEXT.md
 async function dropUnreachedIgnoredDirs(source: string, includePath: string, candidates: string[]): Promise<string[]> {
-  const groups = groupByIgnoredDir(candidates, await whollyIgnoredDirs(source));
-  if (!groups.keys().some((dir) => dir !== null)) return candidates;
+  const { outside, byDir } = groupByIgnoredDir(candidates, await whollyIgnoredDirs(source));
+  if (byDir.size === 0) return outside;
 
   const patterns = positivePatterns((await readFile(includePath, "utf8")).split("\n"));
   const emptyRepo = await mkdtemp(join(tmpdir(), "worktree-include-"));
   try {
     await runGit(["init", "-q"], emptyRepo);
-    const kept: string[] = [];
-    for (const [dir, paths] of groups) {
-      if (dir === null || (await isReached({ source, emptyRepo, dir, patterns }))) kept.push(...paths);
+    const kept = [...outside];
+    for (const [dir, paths] of byDir) {
+      if (await isReached({ source, emptyRepo, dir, patterns })) kept.push(...paths);
     }
     return kept;
   } finally {
@@ -102,19 +105,22 @@ async function isReached({ source, emptyRepo, dir, patterns }: Reach): Promise<b
 }
 
 async function reaches({ source, emptyRepo, dir, line }: Omit<Reach, "patterns"> & { line: string }): Promise<boolean> {
-  switch (patternKind(line)) {
+  const kind = patternKind(line);
+  switch (kind) {
     case "globstar":
       return namesDirectory(line, dir) || dirMatches(emptyRepo, dir, line);
     case "anchored":
       return (await dirMatches(emptyRepo, dir, line)) || (await matchesInside(source, dir, line));
     case "anywhere":
       return dirMatches(emptyRepo, dir, line);
+    default:
+      return assertExhausted(kind);
   }
 }
 
 async function matchesInside(source: string, dir: string, line: string): Promise<boolean> {
   const listed = await runGit(["ls-files", "--others", "--ignored", "-z", `--exclude=${line}`, "--", dir], source);
-  return splitNull(listed).length > 0;
+  return nulSeparated(listed).length > 0;
 }
 
 // why: the source repo's .gitignore would match too; an empty repo tests this pattern alone
@@ -130,17 +136,17 @@ async function dirMatches(emptyRepo: string, dir: string, line: string): Promise
 
 async function whollyIgnoredDirs(source: string): Promise<string[]> {
   const listed = await runGit(["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"], source);
-  const untrackedOrIgnoredDirs = splitNull(listed).filter((entry) => entry.endsWith("/"));
+  const untrackedOrIgnoredDirs = nulSeparated(listed).filter((entry) => entry.endsWith("/"));
   return onlyGitIgnored(source, untrackedOrIgnoredDirs);
 }
 
 async function onlyGitIgnored(source: string, paths: string[]): Promise<string[]> {
   if (paths.length === 0) return [];
-  const ignored = await runGit(["check-ignore", "-z", "--stdin"], source, Buffer.from(paths.join("\0")), [
-    EXIT_OK,
-    CHECK_IGNORE_NONE_IGNORED,
-  ]);
-  return splitNull(ignored);
+  const ignored = await runGit(["check-ignore", "-z", "--stdin"], source, {
+    stdin: Buffer.from(paths.join("\0")),
+    okCodes: [EXIT_OK, CHECK_IGNORE_NONE_IGNORED],
+  });
+  return nulSeparated(ignored);
 }
 
 async function existingPaths(target: string, candidates: string[]): Promise<Set<string>> {
@@ -163,7 +169,7 @@ async function otherWorktreeRelativePaths(source: string): Promise<string[]> {
 async function worktreeRoots(path: string): Promise<string[]> {
   const out = await runGit(["worktree", "list", "--porcelain"], path);
   const prefix = "worktree ";
-  return (out?.toString("utf8") ?? "")
+  return textOf(out)
     .split("\n")
     .filter((line) => line.startsWith(prefix))
     .map((line) => line.slice(prefix.length));
@@ -171,7 +177,7 @@ async function worktreeRoots(path: string): Promise<string[]> {
 
 async function gitTopLevel(path: string): Promise<string> {
   const out = await runGit(["rev-parse", "--show-toplevel"], path);
-  return out?.toString("utf8").trim() || path;
+  return textOf(out).trim() || path;
 }
 
 function exists(path: string): Promise<boolean> {
@@ -181,24 +187,32 @@ function exists(path: string): Promise<boolean> {
   );
 }
 
-function splitNull(buf: Buffer | null): string[] {
-  return (buf?.toString("utf8") ?? "").split("\0").filter((s) => s.length > 0);
+type GitResult = { tag: "ok"; stdout: Buffer } | { tag: "failed"; code: number };
+
+function textOf(result: GitResult): string {
+  return result.tag === "ok" ? result.stdout.toString("utf8") : "";
 }
 
-async function runGit(
-  args: string[],
-  cwd: string,
-  input?: Buffer,
-  okCodes: readonly number[] = [EXIT_OK],
-): Promise<Buffer | null> {
+function nulSeparated(result: GitResult): string[] {
+  return textOf(result)
+    .split("\0")
+    .filter((s) => s.length > 0);
+}
+
+type GitOptions = { stdin: Buffer | "ignore"; okCodes: readonly number[] };
+
+const PLAIN_GIT: GitOptions = { stdin: "ignore", okCodes: [EXIT_OK] };
+
+async function runGit(args: string[], cwd: string, { stdin, okCodes }: GitOptions = PLAIN_GIT): Promise<GitResult> {
   const proc = Bun.spawn(["git", ...args], {
     cwd,
-    stdin: input ?? "ignore",
+    stdin,
     stdout: "pipe",
     stderr: "ignore",
   });
   const stdout = Buffer.from(await new Response(proc.stdout).arrayBuffer());
-  return okCodes.includes(await proc.exited) ? stdout : null;
+  const code = await proc.exited;
+  return okCodes.includes(code) ? { tag: "ok", stdout } : { tag: "failed", code };
 }
 
 async function gitExitCode(args: string[], cwd: string): Promise<number> {

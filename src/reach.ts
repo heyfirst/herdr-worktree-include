@@ -15,19 +15,21 @@ export function patternKind(line: string): PatternKind {
 }
 
 export function namesDirectory(line: string, dir: string): boolean {
-  const [firstName] = line.slice(GLOBSTAR_PREFIX.length).split("/");
-  return firstName !== undefined && dir.split("/").includes(firstName);
+  const firstName = line.slice(GLOBSTAR_PREFIX.length).split("/")[0] ?? "";
+  return firstName !== "" && dir.split("/").includes(firstName);
 }
 
-export function ignoredDirOf(path: string, ignoredDirs: string[]): string | null {
-  return ignoredDirs.find((dir) => path.startsWith(dir)) ?? null;
-}
+export type Grouped = { outside: string[]; byDir: Map<string, string[]> };
 
-export function groupByIgnoredDir(paths: string[], ignoredDirs: string[]): Map<string | null, string[]> {
-  const groups = new Map<string | null, string[]>();
+export function groupByIgnoredDir(paths: string[], ignoredDirs: string[]): Grouped {
+  const grouped: Grouped = { outside: [], byDir: new Map() };
   for (const path of paths) {
-    const dir = ignoredDirOf(path, ignoredDirs);
-    groups.set(dir, [...(groups.get(dir) ?? []), path]);
+    const dir = ignoredDirs.find((ignored) => path.startsWith(ignored)) ?? "";
+    if (!dir) {
+      grouped.outside.push(path);
+      continue;
+    }
+    grouped.byDir.set(dir, [...(grouped.byDir.get(dir) ?? []), path]);
   }
-  return groups;
+  return grouped;
 }

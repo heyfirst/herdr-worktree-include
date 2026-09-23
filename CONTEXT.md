@@ -12,7 +12,7 @@ sequenceDiagram
         participant H as herdr
     end
     box rgba(250, 180, 60, 0.15) Plugin, run by Bun
-        participant M as src/main.ts
+        participant M as src/main.ts + target.ts
         participant A as src/apply.ts
     end
     box rgba(120, 200, 120, 0.15) git + disk
@@ -28,7 +28,7 @@ sequenceDiagram
         H->>+M: bun dist/main.js event<br/>HERDR_PLUGIN_EVENT_JSON
         M->>M: valibot reads data.worktree.path
         alt no path in the event
-            M-->>H: {"tag":"no-target"}
+            M-->>H: {"tag":"no-target","reason":"..."}
         else path found
             M->>+A: apply(main checkout, new worktree)
             A->>G: git worktree list: which is the main checkout?
@@ -54,7 +54,8 @@ sequenceDiagram
 | herdr     | installed app                 | Creates the worktree, then fires `worktree.created`                                           |
 | Manifest  | `herdr-plugin.toml`           | Tells herdr which command to run for the event and for the action                             |
 | Bun       | on your `PATH`                | Runs `dist/main.js`. No install step, because the build bundles valibot                       |
-| Entry     | `src/main.ts`                 | Reads herdr's JSON, finds the target worktree, prints the outcome                             |
+| Entry     | `src/main.ts`                 | The only place that reads `process.argv` and `process.env`, and prints the outcome            |
+| Target    | `src/target.ts`               | Pure: turns herdr's JSON into the target path, or a `reason` it is missing                    |
 | Selection | `src/apply.ts`                | Asks git which files to copy, then copies them                                                |
 | Rules     | `src/plan.ts`, `src/reach.ts` | Pure decisions: skip unsafe paths, existing files, other worktrees, unreached ignored folders |
 | git       | on your `PATH`                | Does all pattern matching. No gitignore logic lives in TypeScript                             |
@@ -74,12 +75,13 @@ contexts = ["workspace"]
 command = ["bun", "dist/main.js", "apply"]
 ```
 
-| Mode    | Triggered by        | herdr passes                | Target worktree comes from                                              |
-| ------- | ------------------- | --------------------------- | ----------------------------------------------------------------------- |
-| `event` | a new worktree      | `HERDR_PLUGIN_EVENT_JSON`   | `data.worktree.path` (`src/main.ts:7`)                                  |
-| `apply` | the action, by hand | `HERDR_PLUGIN_CONTEXT_JSON` | `worktree.checkout_path`, else the first CLI argument (`src/main.ts:8`) |
+| Mode    | Triggered by        | herdr passes                | Target worktree comes from                                                 |
+| ------- | ------------------- | --------------------------- | -------------------------------------------------------------------------- |
+| `event` | a new worktree      | `HERDR_PLUGIN_EVENT_JSON`   | `data.worktree.path` (`src/target.ts:11`)                                  |
+| `apply` | the action, by hand | `HERDR_PLUGIN_CONTEXT_JSON` | `worktree.checkout_path`, else the first CLI argument (`src/target.ts:12`) |
 
-Anything else, or JSON that doesn't fit the schema, ends as `{"tag":"no-target"}`.
+Anything else, or JSON that doesn't fit the schema, ends as `no-target` with a
+`reason`, e.g. `{"tag":"no-target","reason":"HERDR_PLUGIN_EVENT_JSON: not JSON"}`.
 
 ## What the plugin does
 
@@ -87,7 +89,7 @@ Anything else, or JSON that doesn't fit the schema, ends as `{"tag":"no-target"}
 flowchart TD
     start([herdr runs bun dist/main.js event])
 
-    subgraph main["src/main.ts"]
+    subgraph main["src/target.ts: pure"]
         B{target path<br/>in the event JSON?}
     end
 
@@ -107,7 +109,7 @@ flowchart TD
     J[copy each file<br/>never overwrite]
 
     start --> B
-    B -- no --> X1([no-target])
+    B -- no --> X1([no-target + reason])
     B -- yes --> C
     C -- no --> X2([no-source])
     C -- yes --> D
