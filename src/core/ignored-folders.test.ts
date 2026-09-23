@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { groupByIgnoredDir, namesDirectory, patternKind, positivePatterns } from "./reach";
+import { groupByIgnoredDir, namesDirectory, patternKind, positivePatterns } from "./ignored-folders";
 
 describe("patternKind", () => {
   test.each([

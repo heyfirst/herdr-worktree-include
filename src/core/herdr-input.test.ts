@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readInput, resolveTarget, type Input, type Target } from "./target";
+import { readInput, resolveTarget, type Input, type Target } from "./herdr-input";
 
 const EVENT = JSON.stringify({ data: { worktree: { path: "/code/app-fix" } } });
 const CONTEXT = JSON.stringify({ worktree: { checkout_path: "/code/app-ctx" } });

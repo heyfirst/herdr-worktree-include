@@ -45,8 +45,8 @@ do in git.
 - Always exits 0, so it can never break worktree creation.
 - Does nothing when there is no `.worktreeinclude`.
 
-Tests in `src/apply.test.ts` and `src/plan.test.ts` cover all of these except
-two: symlinks and the exit code. A change that loosens a rule needs a reason in
+Every rule has a test: `src/core/skip-rules.test.ts`, `src/io/copy-includes.test.ts`,
+and `src/e2e.test.ts` for the exit code. A change that loosens a rule needs a reason in
 the commit body.
 
 ## Logs
