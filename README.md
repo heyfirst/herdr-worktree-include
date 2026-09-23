@@ -10,7 +10,7 @@ so one file covers both.
 
 ## Install
 
-Requires herdr 0.9.0 or later and [Bun](https://bun.sh) on `PATH`.
+Requires herdr 0.9.1 or later and [Bun](https://bun.sh) on `PATH`.
 
 ```bash
 herdr plugin install heyfirst/herdr-worktree-include
