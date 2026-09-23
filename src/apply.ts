@@ -82,56 +82,62 @@ async function dropUnreachedIgnoredDirs(source: string, includePath: string, can
   if (byDir.size === 0) return outside;
 
   const patterns = positivePatterns((await readFile(includePath, "utf8")).split("\n"));
+  return withEmptyRepo(async (emptyRepo) => {
+    const kept = [...outside];
+    for (const [dir, paths] of byDir) {
+      if (await isReached({ source, emptyRepo, dir }, patterns)) kept.push(...paths);
+    }
+    return kept;
+  });
+}
+
+async function withEmptyRepo<T>(use: (emptyRepo: string) => Promise<T>): Promise<T> {
   const emptyRepo = await mkdtemp(join(tmpdir(), "worktree-include-"));
   try {
     await runGit(["init", "-q"], emptyRepo);
-    const kept = [...outside];
-    for (const [dir, paths] of byDir) {
-      if (await isReached({ source, emptyRepo, dir, patterns })) kept.push(...paths);
-    }
-    return kept;
+    return await use(emptyRepo);
   } finally {
     await rm(emptyRepo, { recursive: true, force: true });
   }
 }
 
-type Reach = { source: string; emptyRepo: string; dir: string; patterns: string[] };
+type Reach = { source: string; emptyRepo: string; dir: string };
 
-async function isReached({ source, emptyRepo, dir, patterns }: Reach): Promise<boolean> {
+async function isReached(reach: Reach, patterns: string[]): Promise<boolean> {
   for (const line of patterns) {
-    if (await reaches({ source, emptyRepo, dir, line })) return true;
+    if (await reaches(reach, line)) return true;
   }
   return false;
 }
 
-async function reaches({ source, emptyRepo, dir, line }: Omit<Reach, "patterns"> & { line: string }): Promise<boolean> {
+async function reaches(reach: Reach, line: string): Promise<boolean> {
   const kind = patternKind(line);
   switch (kind) {
     case "globstar":
-      return namesDirectory(line, dir) || dirMatches(emptyRepo, dir, line);
+      return namesDirectory(line, reach.dir) || dirMatches(reach, line);
     case "anchored":
-      return (await dirMatches(emptyRepo, dir, line)) || (await matchesInside(source, dir, line));
+      return (await dirMatches(reach, line)) || (await matchesInside(reach, line));
     case "anywhere":
-      return dirMatches(emptyRepo, dir, line);
+      return dirMatches(reach, line);
     default:
       return assertExhausted(kind);
   }
 }
 
-async function matchesInside(source: string, dir: string, line: string): Promise<boolean> {
+async function matchesInside({ source, dir }: Reach, line: string): Promise<boolean> {
   const listed = await runGit(["ls-files", "--others", "--ignored", "-z", `--exclude=${line}`, "--", dir], source);
   return nulSeparated(listed).length > 0;
 }
 
 // why: the source repo's .gitignore would match too; an empty repo tests this pattern alone
-async function dirMatches(emptyRepo: string, dir: string, line: string): Promise<boolean> {
+async function dirMatches({ emptyRepo, dir }: Reach, line: string): Promise<boolean> {
   const pattern = join(emptyRepo, "pattern");
   await writeFile(pattern, line);
-  const code = await gitExitCode(
+  const matched = await runGit(
     ["-c", `core.excludesFile=${pattern}`, "check-ignore", "--no-index", "-q", dir],
     emptyRepo,
   );
-  return code === EXIT_OK;
+  return matched.tag === "ok";
 }
 
 async function whollyIgnoredDirs(source: string): Promise<string[]> {
@@ -213,8 +219,4 @@ async function runGit(args: string[], cwd: string, { stdin, okCodes }: GitOption
   const stdout = Buffer.from(await new Response(proc.stdout).arrayBuffer());
   const code = await proc.exited;
   return okCodes.includes(code) ? { tag: "ok", stdout } : { tag: "failed", code };
-}
-
-async function gitExitCode(args: string[], cwd: string): Promise<number> {
-  return Bun.spawn(["git", ...args], { cwd, stdin: "ignore", stdout: "ignore", stderr: "ignore" }).exited;
 }
