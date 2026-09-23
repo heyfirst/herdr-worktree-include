@@ -1,4 +1,4 @@
-const GLOBSTAR_PREFIX = "**/";
+const GLOBSTAR_PREFIX = "**/" as const;
 
 export type PatternKind = "globstar" | "anchored" | "anywhere";
 

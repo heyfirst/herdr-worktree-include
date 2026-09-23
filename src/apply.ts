@@ -6,7 +6,7 @@ import { assertExhausted } from "./assert";
 import { plan, type SkipReason } from "./plan";
 import { groupByIgnoredDir, namesDirectory, patternKind, positivePatterns } from "./reach";
 
-const INCLUDE_FILE = ".worktreeinclude";
+const INCLUDE_FILE = ".worktreeinclude" as const;
 const EXIT_OK = 0;
 const CHECK_IGNORE_NONE_IGNORED = 1;
 
