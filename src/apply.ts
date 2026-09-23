@@ -37,7 +37,7 @@ export async function apply(sourceRoot: string, targetRoot: string): Promise<Out
     files.push(
       item.step === "skip"
         ? { tag: "skipped", path: item.path, reason: item.reason }
-        : await copyOne(source, target, item.path)
+        : await copyOne(source, target, item.path),
     );
   }
   return { tag: "applied", source, target, files };
@@ -66,10 +66,7 @@ async function copyOne(source: string, target: string, path: string): Promise<Fi
 }
 
 async function matchedCandidates(source: string, includePath: string): Promise<string[]> {
-  const included = await runGit(
-    ["ls-files", "--others", "--ignored", "-z", `--exclude-from=${includePath}`],
-    source
-  );
+  const included = await runGit(["ls-files", "--others", "--ignored", "-z", `--exclude-from=${includePath}`], source);
   if (!included || included.length === 0) return [];
 
   const ignored = await runGit(["check-ignore", "-z", "--stdin"], source, included, [
@@ -113,7 +110,7 @@ async function gitTopLevel(path: string): Promise<string> {
 function exists(path: string): Promise<boolean> {
   return lstat(path).then(
     () => true,
-    () => false
+    () => false,
   );
 }
 
@@ -125,7 +122,7 @@ async function runGit(
   args: string[],
   cwd: string,
   input?: Buffer,
-  okCodes: readonly number[] = [EXIT_OK]
+  okCodes: readonly number[] = [EXIT_OK],
 ): Promise<Buffer | null> {
   const proc = Bun.spawn(["git", ...args], {
     cwd,

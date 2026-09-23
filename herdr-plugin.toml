@@ -2,15 +2,15 @@ id = "heyfirst.worktree-include"
 name = "Worktree Include"
 version = "0.1.0"
 min_herdr_version = "0.9.0"
-description = "Copy .worktreeinclude-matched, gitignored files into new herdr worktrees"
+description = "herdr plugin that copies .worktreeinclude files into new worktrees. Built with Bun."
 platforms = ["macos", "linux"]
 
 [[events]]
 on = "worktree.created"
-command = ["bun", "src/main.ts", "event"]
+command = ["bun", "dist/main.js", "event"]
 
 [[actions]]
 id = "apply"
 title = "Apply worktree include"
 contexts = ["workspace"]
-command = ["bun", "src/main.ts", "apply"]
+command = ["bun", "dist/main.js", "apply"]
