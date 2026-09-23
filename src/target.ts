@@ -4,8 +4,8 @@ import { assertExhausted } from "./assert";
 export type Input = { mode: string; argvPath: string; eventJson: string; contextJson: string };
 export type Target = { tag: "found"; path: string } | { tag: "missing"; reason: string };
 
-const EVENT_VAR = "HERDR_PLUGIN_EVENT_JSON";
-const CONTEXT_VAR = "HERDR_PLUGIN_CONTEXT_JSON";
+const EVENT_VAR = "HERDR_PLUGIN_EVENT_JSON" as const;
+const CONTEXT_VAR = "HERDR_PLUGIN_CONTEXT_JSON" as const;
 
 const Path = v.pipe(v.string(), v.minLength(1));
 const WorktreeEvent = v.object({ data: v.object({ worktree: v.object({ path: Path }) }) });
