@@ -1,39 +1,18 @@
 # herdr-worktree-include 🥟
 
-Your `.env` follows you into every new [herdr](https://herdr.dev) worktree.
+Claude Code's `.worktreeinclude`, now for [herdr](https://herdr.dev) worktrees too.
 
 ## The problem 😩
 
-You know git worktrees, right? One repo, many checkouts, one per branch. herdr
-makes them one keystroke away, which is great when a few agents work on the same
-repo at once.
+I use Claude Code as my main driver, at work and at home. And I always run a few agents at once, in multiple worktrees of one monorepo. Of course, herdr makes it much easier to manage them and see the state of each worktree's agent.
 
-But a new worktree only gets **tracked** files. Your `.env`, your local config,
-the secrets that make the app actually run? All gitignored, so none of them come
-along.
+But every new worktree comes without gitignored files. So all the time, the agent can't even run the tests because there's no local env file, and all the time I just tell it: copy it from the main worktree, please.
 
-[Claude Code](https://code.claude.com/docs/en/worktrees) already solved this
-with a `.worktreeinclude` file: list what to copy, and every Claude Code
-worktree gets it. herdr worktrees don't read that file. So if Claude is your
-main driver, like it is at my company, every new herdr worktree starts the same
-way:
-
-```diff
-  $ herdr worktree create --branch fix-login
-- agent: tests fail, DATABASE_URL is not set
-- you:   cp ../main/.env .env   (again)
-+ agent: tests pass
-```
-
-Copy-pasta, every single time. Annoying.
+Claude Code fixed this a long time ago with [`.worktreeinclude`](https://code.claude.com/docs/en/worktrees). herdr worktrees just don't use it tho.
 
 ## The fix ✨
 
-This plugin is a small helper that makes herdr read the same
-`.worktreeinclude`. One file, both tools.
-
-> Create a worktree in herdr or in Claude Code. Either way, `.env` is already
-> there.
+I wrote a small plugin that makes herdr read the same `.worktreeinclude`, and now it works the same as `claude -w <name>` does. No more copy-pasta 🍝
 
 ## Install 📦
 
@@ -62,18 +41,18 @@ already bundles its one dependency, [valibot](https://valibot.dev).
    ```gitignore
    # .worktreeinclude
 
-   # Bun / Node: env files and the private registry token
-   .env
-   .env.*
-   !.env.example
+   # Bun / Node: every app's env files in the monorepo, but not the template
+   **/.env
+   **/.env.*
+   !**/.env.example
    .npmrc
 
-   # Cloudflare Wrangler
-   .dev.vars
+   # Cloudflare Wrangler: one .dev.vars per worker
+   **/.dev.vars
 
-   # Terraform
-   terraform.tfvars
-   *.auto.tfvars
+   # Terraform: one tfvars per environment
+   **/terraform.tfvars
+   **/*.auto.tfvars
 
    # Docker, direnv, local certs
    docker-compose.override.yml
@@ -91,20 +70,26 @@ already bundles its one dependency, [valibot](https://valibot.dev).
 2. Create a new worktree in herdr, like you always do.
 3. That's it. Your `.env` is already there. 🎉
 
+`**/` means "at any depth", so one line covers a whole monorepo:
+
+| Pattern               | Copies                                                                    | Leaves alone                              |
+| --------------------- | ------------------------------------------------------------------------- | ----------------------------------------- |
+| `**/.env`             | `.env`, `apps/web/.env`, `apps/api/.env`                                  | `node_modules/some-pkg/.env`              |
+| `**/.dev.vars`        | `workers/auth/.dev.vars`, `workers/billing/.dev.vars`                     | `node_modules/wrangler/.dev.vars`         |
+| `**/terraform.tfvars` | `infra/envs/staging/terraform.tfvars`, `infra/envs/prod/terraform.tfvars` | `.terraform/modules/vpc/terraform.tfvars` |
+
+It never digs into a folder that's ignored as a whole, like `node_modules/` or
+`.terraform/`, unless a pattern names that folder. Same rule as Claude Code.
+
 Only gitignored files are copied, and nothing already in the worktree gets
 overwritten. Leave out `node_modules/` and build output. They're
 big, and your package manager rebuilds them anyway.
 
 ## Why Bun 🥟
 
-Bun is always on my machine, both my personal and my work laptop. So the choice
-was a no-brainer.
+It's just that Bun is always on my machine, personal laptop and work laptop, and TypeScript is my go-to language. So it was a no-brainer here.
 
-> I'd rather read TypeScript than a shell script, or Rust, or Go.
-
-This plugin copies files into your repo. You should be able to open it and see
-exactly what it does. The whole thing is about 200 lines of TypeScript in
-[`src/`](src), and git does the hard part.
+TypeScript is also easier to read, understand and reason about than a shell script or Rust. This plugin copies files into my repository, so I should be able to explain it when something goes south. It's about 300 lines of code, and git is _load-bearing_ here anyway (😉😏) hehe.
 
 ## Not working? 🔍
 
