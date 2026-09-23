@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { splitNul } from "../lib/text";
 
 const EXIT_OK = 0;
 const CHECK_IGNORE_NONE_IGNORED = 1;
@@ -21,7 +22,7 @@ export async function worktreeRoots(path: string): Promise<string[]> {
 
 export async function filesMatching(source: string, patternFile: string): Promise<string[]> {
   const listed = await runGit(["ls-files", "--others", "--ignored", "-z", `--exclude-from=${patternFile}`], source);
-  return nulSeparated(listed);
+  return splitNul(textOf(listed));
 }
 
 export async function onlyGitIgnored(source: string, paths: string[]): Promise<string[]> {
@@ -30,18 +31,18 @@ export async function onlyGitIgnored(source: string, paths: string[]): Promise<s
     stdin: Buffer.from(paths.join("\0")),
     okCodes: [EXIT_OK, CHECK_IGNORE_NONE_IGNORED],
   });
-  return nulSeparated(ignored);
+  return splitNul(textOf(ignored));
 }
 
 export async function whollyIgnoredDirs(source: string): Promise<string[]> {
   const listed = await runGit(["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"], source);
-  const untrackedOrIgnoredDirs = nulSeparated(listed).filter((entry) => entry.endsWith("/"));
+  const untrackedOrIgnoredDirs = splitNul(textOf(listed)).filter((entry) => entry.endsWith("/"));
   return onlyGitIgnored(source, untrackedOrIgnoredDirs);
 }
 
 export async function patternMatchesInside(source: string, dir: string, line: string): Promise<boolean> {
   const listed = await runGit(["ls-files", "--others", "--ignored", "-z", `--exclude=${line}`, "--", dir], source);
-  return nulSeparated(listed).length > 0;
+  return splitNul(textOf(listed)).length > 0;
 }
 
 // why: the source repo's .gitignore would match too; an empty repo tests this pattern alone
@@ -79,10 +80,4 @@ async function runGit(args: string[], cwd: string, { stdin, okCodes }: GitOption
 
 function textOf(result: GitResult): string {
   return result.tag === "ok" ? result.stdout.toString("utf8") : "";
-}
-
-function nulSeparated(result: GitResult): string[] {
-  return textOf(result)
-    .split("\0")
-    .filter((s) => s.length > 0);
 }
