@@ -26,7 +26,7 @@ function parseMode(arg: string | undefined): Mode | null {
 function resolveTarget(mode: Mode | null, argvPath: string | undefined): string | null {
   switch (mode) {
     case "event":
-      return checkoutPath(field(parseJson(process.env.HERDR_PLUGIN_EVENT_JSON), "data"));
+      return nonEmpty(field(field(field(parseJson(process.env.HERDR_PLUGIN_EVENT_JSON), "data"), "worktree"), "path"));
     case "apply":
       return checkoutPath(parseJson(process.env.HERDR_PLUGIN_CONTEXT_JSON)) ?? argvPath ?? null;
     case null:
@@ -35,6 +35,9 @@ function resolveTarget(mode: Mode | null, argvPath: string | undefined): string 
 }
 
 function checkoutPath(scope: Json | undefined): string | null {
-  const path = field(field(scope, "worktree"), "checkout_path");
-  return typeof path === "string" && path.length > 0 ? path : null;
+  return nonEmpty(field(field(scope, "worktree"), "checkout_path"));
+}
+
+function nonEmpty(value: Json | undefined): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
