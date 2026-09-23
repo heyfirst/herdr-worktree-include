@@ -1,16 +1,16 @@
 import { constants as fsConstants } from "node:fs";
 import { copyFile, lstat, mkdir, readFile, readlink, symlink } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import { groupByIgnoredDir, namesDirectory, patternKind, positivePatterns } from "../core/ignored-folders";
+import { globstarNamesFolder, patternKind, positivePatterns, splitByFolder } from "../core/ignored-folders";
 import { plan, type SkipReason } from "../core/skip-rules";
 import { assertExhausted } from "../lib/assert";
 import {
   filesMatching,
   gitTopLevel,
+  ignoredFolders,
   onlyGitIgnored,
-  patternMatchesDir,
-  patternMatchesInside,
-  whollyIgnoredDirs,
+  patternMatchesFolderItself,
+  patternMatchesInsideFolder,
   withEmptyRepo,
   worktreeRoots,
 } from "./git";
@@ -35,7 +35,7 @@ export async function copyIncludes(sourceRoot: string, targetRoot: string): Prom
   if (source === target) return { tag: "is-main", path: source };
 
   const includePath = join(source, INCLUDE_FILE);
-  if (!(await exists(includePath))) return { tag: "no-manifest", source };
+  if (!(await pathExists(includePath))) return { tag: "no-manifest", source };
 
   const candidates = await matchedCandidates(source, includePath);
   const existingInTarget = await existingPaths(target, candidates);
@@ -56,6 +56,7 @@ export async function copyIncludes(sourceRoot: string, targetRoot: string): Prom
 export type MainWorktree = { tag: "found"; path: string } | { tag: "none" };
 
 export async function mainWorktreeOf(path: string): Promise<MainWorktree> {
+  // git lists the main checkout first
   const [first] = await worktreeRoots(path);
   return first ? { tag: "found", path: first } : { tag: "none" };
 }
@@ -79,45 +80,55 @@ async function copyOne(source: string, target: string, path: string): Promise<Fi
 
 async function matchedCandidates(source: string, includePath: string): Promise<string[]> {
   const ignored = await onlyGitIgnored(source, await filesMatching(source, includePath));
-  return dropUnreachedIgnoredDirs(source, includePath, ignored);
+  return dropFilesInUntargetedFolders(source, includePath, ignored);
 }
 
 // why: matches Claude Code 2.1.281 as measured, not its docs; see CONTEXT.md
-async function dropUnreachedIgnoredDirs(source: string, includePath: string, candidates: string[]): Promise<string[]> {
-  const { outside, byDir } = groupByIgnoredDir(candidates, await whollyIgnoredDirs(source));
-  if (byDir.size === 0) return outside;
+async function dropFilesInUntargetedFolders(
+  source: string,
+  includePath: string,
+  candidates: string[],
+): Promise<string[]> {
+  const { loose, inFolder } = splitByFolder(candidates, await ignoredFolders(source));
+  if (inFolder.size === 0) return loose;
 
   const patterns = positivePatterns((await readFile(includePath, "utf8")).split("\n"));
   return withEmptyRepo(async (emptyRepo) => {
-    const kept = [...outside];
-    for (const [dir, paths] of byDir) {
-      if (await isReached({ source, emptyRepo, dir }, patterns)) kept.push(...paths);
+    const kept = [...loose];
+    for (const [path, files] of inFolder) {
+      if (await anyPatternTargets({ source, emptyRepo, path }, patterns)) kept.push(...files);
     }
     return kept;
   });
 }
 
-type Reach = { source: string; emptyRepo: string; dir: string };
+type FolderCheck = { source: string; emptyRepo: string; path: string };
 
-async function isReached(reach: Reach, patterns: string[]): Promise<boolean> {
-  for (const line of patterns) {
-    if (await reaches(reach, line)) return true;
+async function anyPatternTargets(folder: FolderCheck, patterns: string[]): Promise<boolean> {
+  for (const pattern of patterns) {
+    if (await patternTargetsFolder(pattern, folder)) return true;
   }
   return false;
 }
 
-async function reaches(reach: Reach, line: string): Promise<boolean> {
-  const kind = patternKind(line);
+// A folder gitignored as a whole (node_modules/) is only searched if a pattern targets it:
+//   name-only  .env                 only if it matches the folder itself
+//   any-depth  **/skills/*.md       if "skills" is a name in the folder's path
+//   path       vendor/**/keep.json  if it matches the folder, or something inside it
+async function patternTargetsFolder(pattern: string, folder: FolderCheck): Promise<boolean> {
+  const kind = patternKind(pattern);
   switch (kind) {
-    case "globstar":
-      return namesDirectory(line, reach.dir) || patternMatchesDir(reach.emptyRepo, reach.dir, line);
-    case "anchored":
+    case "any-depth":
       return (
-        (await patternMatchesDir(reach.emptyRepo, reach.dir, line)) ||
-        (await patternMatchesInside(reach.source, reach.dir, line))
+        globstarNamesFolder(pattern, folder.path) || patternMatchesFolderItself(folder.emptyRepo, folder.path, pattern)
       );
-    case "anywhere":
-      return patternMatchesDir(reach.emptyRepo, reach.dir, line);
+    case "path":
+      return (
+        (await patternMatchesFolderItself(folder.emptyRepo, folder.path, pattern)) ||
+        (await patternMatchesInsideFolder(folder.source, folder.path, pattern))
+      );
+    case "name-only":
+      return patternMatchesFolderItself(folder.emptyRepo, folder.path, pattern);
     default:
       return assertExhausted(kind);
   }
@@ -126,7 +137,7 @@ async function reaches(reach: Reach, line: string): Promise<boolean> {
 async function existingPaths(target: string, candidates: string[]): Promise<Set<string>> {
   const existing = new Set<string>();
   for (const path of candidates) {
-    if (await exists(join(target, path))) existing.add(path);
+    if (await pathExists(join(target, path))) existing.add(path);
   }
   return existing;
 }
@@ -140,7 +151,7 @@ async function otherWorktreeRelativePaths(source: string): Promise<string[]> {
     .filter((rel) => rel.length > 0 && !rel.startsWith(".."));
 }
 
-function exists(path: string): Promise<boolean> {
+function pathExists(path: string): Promise<boolean> {
   return lstat(path).then(
     () => true,
     () => false,

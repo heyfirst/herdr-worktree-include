@@ -5,6 +5,7 @@ await run().then(
   (outcome) => console.log(JSON.stringify(outcome)),
   (error) => console.error(`worktree-include: ${error instanceof Error ? error.stack : String(error)}`),
 );
+// always exit 0: a failure must never block worktree creation
 process.exit(0);
 
 async function run(): Promise<Outcome> {

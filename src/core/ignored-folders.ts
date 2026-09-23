@@ -1,6 +1,7 @@
 const GLOBSTAR_PREFIX = "**/" as const;
+const NO_FOLDER = "" as const;
 
-export type PatternKind = "globstar" | "anchored" | "anywhere";
+export type PatternKind = "any-depth" | "path" | "name-only";
 
 export function positivePatterns(lines: string[]): string[] {
   return lines
@@ -8,28 +9,30 @@ export function positivePatterns(lines: string[]): string[] {
     .filter((line) => line !== "" && !line.startsWith("#") && !line.startsWith("!"));
 }
 
-export function patternKind(line: string): PatternKind {
-  if (line.startsWith(GLOBSTAR_PREFIX)) return "globstar";
-  const slashBeforeEnd = line.slice(0, -1).includes("/");
-  return slashBeforeEnd ? "anchored" : "anywhere";
+export function patternKind(pattern: string): PatternKind {
+  if (pattern.startsWith(GLOBSTAR_PREFIX)) return "any-depth";
+  // a trailing "/" only says "folder", so it does not make the pattern a path
+  const slashBeforeEnd = pattern.slice(0, -1).includes("/");
+  return slashBeforeEnd ? "path" : "name-only";
 }
 
-export function namesDirectory(line: string, dir: string): boolean {
-  const firstName = line.slice(GLOBSTAR_PREFIX.length).split("/")[0] ?? "";
-  return firstName !== "" && dir.split("/").includes(firstName);
+export function globstarNamesFolder(pattern: string, folder: string): boolean {
+  const firstName = pattern.slice(GLOBSTAR_PREFIX.length).split("/")[0] ?? "";
+  return firstName !== "" && folder.split("/").includes(firstName);
 }
 
-export type Grouped = { outside: string[]; byDir: Map<string, string[]> };
+export type Split = { loose: string[]; inFolder: Map<string, string[]> };
 
-export function groupByIgnoredDir(paths: string[], ignoredDirs: string[]): Grouped {
-  const grouped: Grouped = { outside: [], byDir: new Map() };
+// folders end in "/", so "a/" never matches a path under "ab/"
+export function splitByFolder(paths: string[], folders: string[]): Split {
+  const split: Split = { loose: [], inFolder: new Map() };
   for (const path of paths) {
-    const dir = ignoredDirs.find((ignored) => path.startsWith(ignored)) ?? "";
-    if (!dir) {
-      grouped.outside.push(path);
+    const folder = folders.find((candidate) => path.startsWith(candidate)) ?? NO_FOLDER;
+    if (folder === NO_FOLDER) {
+      split.loose.push(path);
       continue;
     }
-    grouped.byDir.set(dir, [...(grouped.byDir.get(dir) ?? []), path]);
+    split.inFolder.set(folder, [...(split.inFolder.get(folder) ?? []), path]);
   }
-  return grouped;
+  return split;
 }

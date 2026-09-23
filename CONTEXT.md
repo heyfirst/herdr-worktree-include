@@ -33,7 +33,7 @@ sequenceDiagram
             M->>+A: copyIncludes(main checkout, new worktree)
             A->>G: git worktree list: which is the main checkout?
             A->>G: ls-files + check-ignore: match .worktreeinclude AND gitignored?
-            A->>G: which ignored folders does a pattern reach?
+            A->>G: which ignored folders does a pattern target?
             G-->>A: files to copy
             loop each file
                 A->>FS: copy main/path to worktree/path, never overwrite
@@ -60,21 +60,22 @@ src/main.ts                     entry: reads argv + env, prints the result
       ├─▶ core/skip-rules.ts    "copy or skip each file?"  unsafe / exists / other worktree  (pure)
       └─ copy the files
 lib/assert.ts                   assertExhausted, used by herdr-input.ts + copy-includes.ts
+lib/text.ts                     splitNul, used by io/git.ts
 ```
 
 ## Who does what
 
-| Piece     | Where                                                   | Job                                                                                           |
-| --------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| herdr     | installed app                                           | Creates the worktree, then fires `worktree.created`                                           |
-| Manifest  | `herdr-plugin.toml`                                     | Tells herdr which command to run for the event and for the action                             |
-| Bun       | on your `PATH`                                          | Runs `dist/main.js`. No install step, because the build bundles valibot                       |
-| Entry     | `src/main.ts`                                           | The only place that reads `process.argv` and `process.env`, and prints the outcome            |
-| Input     | `src/core/herdr-input.ts`                               | Pure: turns herdr's JSON into the target path, or a `reason` it is missing                    |
-| Conductor | `src/io/copy-includes.ts`                               | Asks git which files to copy, decides with the pure rules, copies them                        |
-| git calls | `src/io/git.ts`                                         | Every git command the plugin runs, one function per question                                  |
-| Rules     | `src/core/skip-rules.ts`, `src/core/ignored-folders.ts` | Pure decisions: skip unsafe paths, existing files, other worktrees, unreached ignored folders |
-| git       | on your `PATH`                                          | Does all pattern matching. No gitignore logic lives in TypeScript                             |
+| Piece     | Where                                                   | Job                                                                                                    |
+| --------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| herdr     | installed app                                           | Creates the worktree, then fires `worktree.created`                                                    |
+| Manifest  | `herdr-plugin.toml`                                     | Tells herdr which command to run for the event and for the action                                      |
+| Bun       | on your `PATH`                                          | Runs `dist/main.js`. No install step, because the build bundles valibot                                |
+| Entry     | `src/main.ts`                                           | The only place that reads `process.argv` and `process.env`, and prints the outcome                     |
+| Input     | `src/core/herdr-input.ts`                               | Pure: turns herdr's JSON into the target path, or a `reason` it is missing                             |
+| Conductor | `src/io/copy-includes.ts`                               | Asks git which files to copy, decides with the pure rules, copies them                                 |
+| git calls | `src/io/git.ts`                                         | Every git command the plugin runs, one function per question                                           |
+| Rules     | `src/core/skip-rules.ts`, `src/core/ignored-folders.ts` | Pure decisions: skip unsafe paths, existing files, other worktrees, ignored folders no pattern targets |
+| git       | on your `PATH`                                          | Does all pattern matching. No gitignore logic lives in TypeScript                                      |
 
 ## How herdr calls the plugin
 
@@ -116,7 +117,7 @@ flowchart TD
         E{.worktreeinclude<br/>in the main checkout?}
         F[files matching .worktreeinclude<br/>git ls-files]
         G[keep the gitignored ones<br/>git check-ignore]
-        H[drop ignored folders<br/>no pattern reaches]
+        H[drop files in ignored folders<br/>no pattern targets]
     end
 
     subgraph pure["core/skip-rules.ts: pure"]
@@ -149,37 +150,37 @@ Every box that ends in a tag is printed as one JSON line. The process always exi
 
 Every git call is in `src/io/git.ts`, and each function answers one question.
 
-| Question                                   | git command                                                                               | Function               |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------- | ---------------------- |
-| Where is the main checkout?                | `git worktree list --porcelain` (first entry)                                             | `worktreeRoots`        |
-| Which files match `.worktreeinclude`?      | `git ls-files --others --ignored -z --exclude-from=.worktreeinclude`                      | `filesMatching`        |
-| Which of those are gitignored?             | `git check-ignore -z --stdin`                                                             | `onlyGitIgnored`       |
-| Which folders are ignored as a whole?      | `git ls-files --others --ignored --exclude-standard --directory -z`, then `check-ignore`  | `whollyIgnoredDirs`    |
-| Does this folder match this one pattern?   | `git -c core.excludesFile=<pattern> check-ignore --no-index -q <folder>` in an empty repo | `patternMatchesDir`    |
-| Does this root path point inside a folder? | `git ls-files --others --ignored -z --exclude=<pattern> -- <folder>`                      | `patternMatchesInside` |
-| Which other worktrees sit inside this one? | `git worktree list --porcelain`                                                           | `worktreeRoots`        |
+| Question                                      | git command                                                                               | Function                     |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------- |
+| Where is the main checkout?                   | `git worktree list --porcelain` (first entry)                                             | `worktreeRoots`              |
+| Which files match `.worktreeinclude`?         | `git ls-files --others --ignored -z --exclude-from=.worktreeinclude`                      | `filesMatching`              |
+| Which of those are gitignored?                | `git check-ignore -z --stdin`                                                             | `onlyGitIgnored`             |
+| Which folders are ignored as a whole?         | `git ls-files --others --ignored --exclude-standard --directory -z`, then `check-ignore`  | `ignoredFolders`             |
+| Does this folder match this one pattern?      | `git -c core.excludesFile=<pattern> check-ignore --no-index -q <folder>` in an empty repo | `patternMatchesFolderItself` |
+| Does this path pattern match inside a folder? | `git ls-files --others --ignored -z --exclude=<pattern> -- <folder>`                      | `patternMatchesInsideFolder` |
+| Which other worktrees sit inside this one?    | `git worktree list --porcelain`                                                           | `worktreeRoots`              |
 
 Why git and not a glob library: negation (`!`), a trailing `/` for folders, and nested `.gitignore` files all behave the way git says, because git is the one deciding.
 
 ## Folders ignored as a whole
 
-Claude Code has one extra rule, and this plugin copies it. A folder that is gitignored as a whole, like `node_modules/`, is only looked inside when some pattern **reaches** it. Once one pattern reaches it, every pattern applies inside.
+Claude Code has one extra rule, and this plugin copies it. A folder that is gitignored as a whole, like `node_modules/`, is only looked inside when some pattern **targets** it. Once one pattern targets it, every pattern applies inside.
 
-A pattern reaches a folder when:
+A pattern targets a folder when:
 
-| Pattern kind                     | Example                  | Reaches the folder when                            |
-| -------------------------------- | ------------------------ | -------------------------------------------------- |
-| Matches the folder itself        | `vendor/`, `**/tm*`      | always                                             |
-| Starts with `**/`                | `**/.claude/skills/*.md` | the first name after `**/` is in the folder's path |
-| Root path (a `/` before the end) | `vendor/**/keep.json`    | it matches something inside the folder             |
-| No slash                         | `.env`, `*.md`           | never, unless it matches the folder itself         |
+| Pattern kind                | Example                  | Targets the folder when                            |
+| --------------------------- | ------------------------ | -------------------------------------------------- |
+| Matches the folder itself   | `vendor/`, `**/tm*`      | always                                             |
+| Starts with `**/`           | `**/.claude/skills/*.md` | the first name after `**/` is in the folder's path |
+| Path (a `/` before the end) | `vendor/**/keep.json`    | it matches something inside the folder             |
+| No slash                    | `.env`, `*.md`           | never, unless it matches the folder itself         |
 
 ```mermaid
 flowchart LR
-    F([file inside a folder<br/>ignored as a whole]) --> Q{any pattern<br/>reaches the folder?}
+    F([file inside a folder<br/>ignored as a whole]) --> Q{any pattern<br/>targets the folder?}
     Q -- "matches the folder<br/>vendor/ , **/tm*" --> Y([look inside:<br/>every pattern applies])
     Q -- "**/ names it<br/>**/.claude/skills/*.md" --> Y
-    Q -- "root path into it<br/>vendor/**/keep.json" --> Y
+    Q -- "path into it<br/>vendor/**/keep.json" --> Y
     Q -- "none: .env , *.md ,<br/>**/config.json" --> N([skip the whole folder])
 
     classDef stop fill:#fde2e1,stroke:#c0392b,color:#7a1c14
@@ -200,7 +201,7 @@ Checked against real Claude Code 2.1.281 with `claude -p -w` in a scratch repo:
 | `tmp/`           | `**/tm*`                                 | `tmp/a.txt`                   | ✅          | ✅  |
 | `vendor/`        | `vendor/`                                | `vendor/lib/x.json`           | ✅          | ✅  |
 
-Without it, `.env` or `**/.env` would copy every `.env` shipped inside `node_modules`. The rule is `dropUnreachedIgnoredDirs` in `src/io/copy-includes.ts`, and every row above is a `test.each` case in `src/io/copy-includes.test.ts`.
+Without it, `.env` or `**/.env` would copy every `.env` shipped inside `node_modules`. The rule is `dropFilesInUntargetedFolders` in `src/io/copy-includes.ts`, and every row above is a `test.each` case in `src/io/copy-includes.test.ts`.
 
 ## How a file gets from main to the new worktree
 
@@ -212,7 +213,7 @@ main checkout (source)                     new worktree (target)
 ├── .env               ───────── copy ───▶ .env
 ├── .claude/skills/a.md ──────── copy ───▶ .claude/skills/a.md   (folders created)
 ├── link -> .env       ── recreate link ─▶ link -> .env          (never followed)
-└── node_modules/pkg/.env    ✖ not reached
+└── node_modules/pkg/.env    ✖ not targeted
 ```
 
 | Case                           | What happens                                           | Where                |

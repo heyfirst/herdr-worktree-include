@@ -133,32 +133,32 @@ describe("copyIncludes", () => {
     expect(copied(outcome)).toEqual([".env"]);
   });
 
-  type ReachCase = { name: string; gitignore: string; include: string; paths: string[]; copies: string[] };
+  type TargetCase = { name: string; gitignore: string; include: string; paths: string[]; copies: string[] };
 
-  test.each<ReachCase>([
+  test.each<TargetCase>([
     {
-      name: "does not reach in when the pattern does not name the directory",
+      name: "does not target the folder when the pattern does not name it",
       gitignore: "vendor/\nconfig.json\n",
       include: "**/config.json\n",
       paths: ["vendor/lib/config.json", "config.json"],
       copies: ["config.json"],
     },
     {
-      name: "reaches in when the first name after **/ is in the directory path",
+      name: "targets the folder when the first name after **/ is in its path",
       gitignore: ".claude/\n",
       include: "**/.claude/skills/*.md\n",
       paths: [".claude/skills/a.md", ".claude/other.md"],
       copies: [".claude/skills/a.md"],
     },
     {
-      name: "reaches in when the directory itself matches the pattern",
+      name: "targets the folder when the pattern matches it",
       gitignore: "tmp/\n",
       include: "**/tm*\n",
       paths: ["tmp/a.txt", "tmp/deep/b.txt"],
       copies: ["tmp/a.txt", "tmp/deep/b.txt"],
     },
     {
-      name: "a pattern without **/ still reaches in",
+      name: "a pattern without **/ still targets the folder",
       gitignore: "vendor/\n",
       include: "vendor/**/config.json\n",
       paths: ["vendor/lib/config.json"],
@@ -172,35 +172,35 @@ describe("copyIncludes", () => {
       copies: [".claude/skills/a.md"],
     },
     {
-      name: "a pattern with no slash does not reach in",
+      name: "a pattern with no slash does not target the folder",
       gitignore: "node_modules/\n.env\n",
       include: ".env\n",
       paths: ["node_modules/pkg/.env", ".env"],
       copies: [".env"],
     },
     {
-      name: "a no-slash glob does not reach in",
+      name: "a no-slash glob does not target the folder",
       gitignore: "docs-cache/\n",
       include: "*.md\n",
       paths: ["docs-cache/a.md"],
       copies: [],
     },
     {
-      name: "a pattern naming the directory itself reaches in",
+      name: "a pattern naming the folder itself targets it",
       gitignore: "vendor/\n",
       include: "vendor/\n",
       paths: ["vendor/lib/x.json"],
       copies: ["vendor/lib/x.json"],
     },
     {
-      name: "a root path reaches in",
+      name: "a path pattern targets the folder",
       gitignore: ".claude/local/\n",
       include: ".claude/local/settings.json\n",
       paths: [".claude/local/settings.json"],
       copies: [".claude/local/settings.json"],
     },
     {
-      name: "once reached, every pattern applies inside",
+      name: "once targeted, every pattern applies inside",
       gitignore: "vendor/\n",
       include: "vendor/**/keep.json\n**/config.json\n",
       paths: ["vendor/lib/keep.json", "vendor/lib/config.json"],
@@ -213,7 +213,7 @@ describe("copyIncludes", () => {
       paths: ["apps/web/node_modules/pkg/.env", "apps/web/.env"],
       copies: ["apps/web/.env"],
     },
-  ])("wholly ignored directory, as Claude Code 2.1.281 does: $name", async ({ gitignore, include, paths, copies }) => {
+  ])("folder ignored as a whole, as Claude Code 2.1.281 does: $name", async ({ gitignore, include, paths, copies }) => {
     await write(join(main, ".gitignore"), gitignore);
     await write(join(main, ".worktreeinclude"), include);
     await commitInitial([".gitignore", ".worktreeinclude"]);
