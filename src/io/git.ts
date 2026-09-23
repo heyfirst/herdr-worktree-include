@@ -34,23 +34,27 @@ export async function onlyGitIgnored(source: string, paths: string[]): Promise<s
   return splitNul(textOf(ignored));
 }
 
-export async function whollyIgnoredDirs(source: string): Promise<string[]> {
+// folders gitignored as a whole, like node_modules/
+export async function ignoredFolders(source: string): Promise<string[]> {
   const listed = await runGit(["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"], source);
-  const untrackedOrIgnoredDirs = splitNul(textOf(listed)).filter((entry) => entry.endsWith("/"));
-  return onlyGitIgnored(source, untrackedOrIgnoredDirs);
+  const folders = splitNul(textOf(listed)).filter((entry) => entry.endsWith("/"));
+  return onlyGitIgnored(source, folders);
 }
 
-export async function patternMatchesInside(source: string, dir: string, line: string): Promise<boolean> {
-  const listed = await runGit(["ls-files", "--others", "--ignored", "-z", `--exclude=${line}`, "--", dir], source);
+export async function patternMatchesInsideFolder(source: string, folder: string, pattern: string): Promise<boolean> {
+  const listed = await runGit(
+    ["ls-files", "--others", "--ignored", "-z", `--exclude=${pattern}`, "--", folder],
+    source,
+  );
   return splitNul(textOf(listed)).length > 0;
 }
 
 // why: the source repo's .gitignore would match too; an empty repo tests this pattern alone
-export async function patternMatchesDir(emptyRepo: string, dir: string, line: string): Promise<boolean> {
-  const pattern = join(emptyRepo, "pattern");
-  await writeFile(pattern, line);
+export async function patternMatchesFolderItself(emptyRepo: string, folder: string, pattern: string): Promise<boolean> {
+  const patternFile = join(emptyRepo, "pattern");
+  await writeFile(patternFile, pattern);
   const matched = await runGit(
-    ["-c", `core.excludesFile=${pattern}`, "check-ignore", "--no-index", "-q", dir],
+    ["-c", `core.excludesFile=${patternFile}`, "check-ignore", "--no-index", "-q", folder],
     emptyRepo,
   );
   return matched.tag === "ok";

@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { groupByIgnoredDir, namesDirectory, patternKind, positivePatterns } from "./ignored-folders";
+import { globstarNamesFolder, patternKind, positivePatterns, splitByFolder } from "./ignored-folders";
 
 describe("patternKind", () => {
   test.each([
-    { line: "**/.env", kind: "globstar" },
-    { line: ".env", kind: "anywhere" },
-    { line: "vendor/", kind: "anywhere" },
-    { line: "vendor/**/config.json", kind: "anchored" },
-    { line: "/certs/", kind: "anchored" },
+    { line: "**/.env", kind: "any-depth" },
+    { line: ".env", kind: "name-only" },
+    { line: "vendor/", kind: "name-only" },
+    { line: "vendor/**/config.json", kind: "path" },
+    { line: "/certs/", kind: "path" },
   ])("$line -> $kind", ({ line, kind }) => {
     expect(patternKind(line)).toBe(kind);
   });
@@ -22,22 +22,22 @@ describe("positivePatterns", () => {
   });
 });
 
-describe("namesDirectory", () => {
+describe("globstarNamesFolder", () => {
   test.each([
-    { line: "**/.claude/skills/*.md", dir: ".claude/", expected: true },
-    { line: "**/node_modules", dir: "apps/web/node_modules/", expected: true },
-    { line: "**/config.json", dir: "vendor/", expected: false },
-    { line: "**/*.md", dir: "docs/", expected: false },
-  ])("$line in $dir -> $expected", ({ line, dir, expected }) => {
-    expect(namesDirectory(line, dir)).toBe(expected);
+    { line: "**/.claude/skills/*.md", folder: ".claude/", expected: true },
+    { line: "**/node_modules", folder: "apps/web/node_modules/", expected: true },
+    { line: "**/config.json", folder: "vendor/", expected: false },
+    { line: "**/*.md", folder: "docs/", expected: false },
+  ])("$line in $folder -> $expected", ({ line, folder, expected }) => {
+    expect(globstarNamesFolder(line, folder)).toBe(expected);
   });
 });
 
-describe("groupByIgnoredDir", () => {
-  test("groups paths under their ignored dir, the rest as outside", () => {
-    const { outside, byDir } = groupByIgnoredDir(["vendor/a", ".env", "vendor/b/c"], ["vendor/"]);
+describe("splitByFolder", () => {
+  test("groups paths under their ignored folder, the rest as loose", () => {
+    const { loose, inFolder } = splitByFolder(["vendor/a", ".env", "vendor/b/c"], ["vendor/"]);
 
-    expect(outside).toEqual([".env"]);
-    expect([...byDir]).toEqual([["vendor/", ["vendor/a", "vendor/b/c"]]]);
+    expect(loose).toEqual([".env"]);
+    expect([...inFolder]).toEqual([["vendor/", ["vendor/a", "vendor/b/c"]]]);
   });
 });
