@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apply, mainWorktreeOf, type FileOutcome, type Outcome } from "./apply";
+import { copyIncludes, mainWorktreeOf, type FileOutcome, type Outcome } from "./copy-includes";
 
 let root: string;
 
@@ -58,12 +58,12 @@ async function addWorktree() {
   await git(["worktree", "add", "-q", worktree, "feature"], main);
 }
 
-describe("apply", () => {
+describe("copyIncludes", () => {
   test("no manifest -> nothing copied", async () => {
     await commitInitial();
     await addWorktree();
 
-    const outcome = await apply(main, worktree);
+    const outcome = await copyIncludes(main, worktree);
 
     expect(outcome.tag).toBe("no-manifest");
   });
@@ -75,7 +75,7 @@ describe("apply", () => {
     await commitInitial([".gitignore", ".worktreeinclude", "tracked.txt"]);
     await addWorktree();
 
-    const outcome = await apply(main, worktree);
+    const outcome = await copyIncludes(main, worktree);
 
     expect(copied(outcome)).toEqual([]);
   });
@@ -86,7 +86,7 @@ describe("apply", () => {
     await addWorktree();
     await write(join(main, "loose.txt"), "loose\n");
 
-    const outcome = await apply(main, worktree);
+    const outcome = await copyIncludes(main, worktree);
 
     expect(copied(outcome)).toEqual([]);
   });
@@ -99,7 +99,7 @@ describe("apply", () => {
     await write(join(main, ".env"), "SECRET=1\n");
     await write(join(main, "other.secret"), "nope\n");
 
-    const outcome = await apply(main, worktree);
+    const outcome = await copyIncludes(main, worktree);
 
     expect(copied(outcome)).toEqual([".env"]);
     expect(await Bun.file(join(worktree, "other.secret")).exists()).toBe(false);
@@ -113,7 +113,7 @@ describe("apply", () => {
     await write(join(main, ".env"), "SECRET=1\n");
     await write(join(main, "config/secrets.json"), '{"k":1}\n');
 
-    const outcome = await apply(main, worktree);
+    const outcome = await copyIncludes(main, worktree);
 
     expect(copied(outcome)).toEqual([".env", "config/secrets.json"]);
     expect(await readFile(join(worktree, ".env"), "utf8")).toBe("SECRET=1\n");
@@ -128,7 +128,7 @@ describe("apply", () => {
     await write(join(main, ".env"), "SECRET=1\n");
     await write(join(main, ".env.example"), "EXAMPLE=1\n");
 
-    const outcome = await apply(main, worktree);
+    const outcome = await copyIncludes(main, worktree);
 
     expect(copied(outcome)).toEqual([".env"]);
   });
@@ -220,7 +220,21 @@ describe("apply", () => {
     await addWorktree();
     for (const path of paths) await write(join(main, path), "x\n");
 
-    expect(copied(await apply(main, worktree))).toEqual(copies);
+    expect(copied(await copyIncludes(main, worktree))).toEqual(copies);
+  });
+
+  test("a symlink is recreated as a link, never followed", async () => {
+    await write(join(main, ".gitignore"), "link.env\n");
+    await write(join(main, ".worktreeinclude"), "link.env\n");
+    await commitInitial([".gitignore", ".worktreeinclude"]);
+    await addWorktree();
+    await symlink("../outside/.env", join(main, "link.env"));
+
+    const outcome = await copyIncludes(main, worktree);
+
+    expect(copied(outcome)).toEqual(["link.env"]);
+    expect((await lstat(join(worktree, "link.env"))).isSymbolicLink()).toBe(true);
+    expect(await readlink(join(worktree, "link.env"))).toBe("../outside/.env");
   });
 
   test("existing target file is untouched", async () => {
@@ -231,7 +245,7 @@ describe("apply", () => {
     await write(join(main, ".env"), "SECRET=1\n");
     await write(join(worktree, ".env"), "ALREADY=1\n");
 
-    const outcome = await apply(main, worktree);
+    const outcome = await copyIncludes(main, worktree);
 
     expect(files(outcome)).toEqual([{ tag: "skipped", path: ".env", reason: "exists" }]);
     expect(await readFile(join(worktree, ".env"), "utf8")).toBe("ALREADY=1\n");
@@ -243,7 +257,7 @@ describe("apply", () => {
     await commitInitial([".gitignore", ".worktreeinclude"]);
     await write(join(main, ".env"), "SECRET=1\n");
 
-    const outcome = await apply(main, main);
+    const outcome = await copyIncludes(main, main);
 
     expect(outcome.tag).toBe("is-main");
   });

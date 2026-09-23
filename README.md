@@ -89,7 +89,7 @@ big, and your package manager rebuilds them anyway.
 
 It's just that Bun is always on my machine, personal laptop and work laptop, and TypeScript is my go-to language. So it was a no-brainer here.
 
-TypeScript is also easier to read, understand and reason about than a shell script or Rust. This plugin copies files into my repository, so I should be able to explain it when something goes south. It's about 370 lines of code, and git is _load-bearing_ here anyway (😉😏) hehe.
+TypeScript is also easier to read, understand and reason about than a shell script or Rust. This plugin copies files into my repository, so I should be able to explain it when something goes south. It's about 380 lines of code, and git is _load-bearing_ here anyway (😉😏) hehe.
 
 ## Not working? 🔍
 

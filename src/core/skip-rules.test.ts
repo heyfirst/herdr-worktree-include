@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { plan, type Facts, type SkipReason } from "./plan";
+import { plan, type Facts, type SkipReason } from "./skip-rules";
 
 type Skip = { path: string; reason: SkipReason };
 

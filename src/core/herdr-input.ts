@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { assertExhausted } from "./assert";
+import { assertExhausted } from "../lib/assert";
 
 export type Input = { mode: string; argvPath: string; eventJson: string; contextJson: string };
 export type Target = { tag: "found"; path: string } | { tag: "missing"; reason: string };
@@ -13,7 +13,7 @@ const ApplyContext = v.object({ worktree: v.object({ checkout_path: Path }) });
 
 type Mode = "event" | "apply" | "unknown";
 
-export function readInput(argv: string[], env: typeof process.env): Input {
+export function readInput(argv: string[], env: NodeJS.ProcessEnv): Input {
   return {
     mode: argv[2] ?? "",
     argvPath: argv[3] ?? "",

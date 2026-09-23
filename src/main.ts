@@ -1,5 +1,5 @@
-import { apply, mainWorktreeOf, type Outcome } from "./apply";
-import { readInput, resolveTarget } from "./target";
+import { copyIncludes, mainWorktreeOf, type Outcome } from "./io/copy-includes";
+import { readInput, resolveTarget } from "./core/herdr-input";
 
 await run().then(
   (outcome) => console.log(JSON.stringify(outcome)),
@@ -14,5 +14,5 @@ async function run(): Promise<Outcome> {
   const source = await mainWorktreeOf(target.path);
   if (source.tag === "none") return { tag: "no-source", target: target.path };
 
-  return apply(source.path, target.path);
+  return copyIncludes(source.path, target.path);
 }
