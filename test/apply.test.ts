@@ -2,9 +2,20 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apply, mainWorktreeOf } from "../src/apply";
+import { apply, mainWorktreeOf, type FileOutcome, type Outcome } from "../src/apply";
 
 let root: string;
+
+function files(outcome: Outcome): FileOutcome[] {
+  if (outcome.tag !== "applied") throw new Error(`expected applied, got ${outcome.tag}`);
+  return outcome.files;
+}
+
+function copied(outcome: Outcome): string[] {
+  return files(outcome)
+    .flatMap((f) => (f.tag === "copied" ? [f.path] : []))
+    .sort();
+}
 let main: string;
 let worktree: string;
 
@@ -52,11 +63,9 @@ describe("apply", () => {
     await commitInitial();
     await addWorktree();
 
-    const report = await apply(main, worktree);
+    const outcome = await apply(main, worktree);
 
-    expect(report.copy).toEqual([]);
-    expect(report.skipped).toEqual([]);
-    expect(report.failed).toEqual([]);
+    expect(outcome.tag).toBe("no-manifest");
   });
 
   test("tracked file matching pattern is not copied", async () => {
@@ -66,9 +75,9 @@ describe("apply", () => {
     await commitInitial([".gitignore", ".worktreeinclude", "tracked.txt"]);
     await addWorktree();
 
-    const report = await apply(main, worktree);
+    const outcome = await apply(main, worktree);
 
-    expect(report.copy).toEqual([]);
+    expect(copied(outcome)).toEqual([]);
   });
 
   test("untracked but not ignored is not copied", async () => {
@@ -77,9 +86,9 @@ describe("apply", () => {
     await addWorktree();
     await write(join(main, "loose.txt"), "loose\n");
 
-    const report = await apply(main, worktree);
+    const outcome = await apply(main, worktree);
 
-    expect(report.copy).toEqual([]);
+    expect(copied(outcome)).toEqual([]);
   });
 
   test("ignored but not listed in .worktreeinclude is not copied", async () => {
@@ -90,10 +99,10 @@ describe("apply", () => {
     await write(join(main, ".env"), "SECRET=1\n");
     await write(join(main, "other.secret"), "nope\n");
 
-    const report = await apply(main, worktree);
+    const outcome = await apply(main, worktree);
 
-    expect(report.copy).toEqual([".env"]);
-    await expect(readFile(join(worktree, "other.secret"), "utf8")).rejects.toThrow();
+    expect(copied(outcome)).toEqual([".env"]);
+    expect(await Bun.file(join(worktree, "other.secret")).exists()).toBe(false);
   });
 
   test("listed and ignored is copied, including nested dir", async () => {
@@ -104,9 +113,9 @@ describe("apply", () => {
     await write(join(main, ".env"), "SECRET=1\n");
     await write(join(main, "config/secrets.json"), '{"k":1}\n');
 
-    const report = await apply(main, worktree);
+    const outcome = await apply(main, worktree);
 
-    expect(report.copy.sort()).toEqual([".env", "config/secrets.json"]);
+    expect(copied(outcome)).toEqual([".env", "config/secrets.json"]);
     expect(await readFile(join(worktree, ".env"), "utf8")).toBe("SECRET=1\n");
     expect(await readFile(join(worktree, "config/secrets.json"), "utf8")).toBe('{"k":1}\n');
   });
@@ -119,9 +128,9 @@ describe("apply", () => {
     await write(join(main, ".env"), "SECRET=1\n");
     await write(join(main, ".env.example"), "EXAMPLE=1\n");
 
-    const report = await apply(main, worktree);
+    const outcome = await apply(main, worktree);
 
-    expect(report.copy).toEqual([".env"]);
+    expect(copied(outcome)).toEqual([".env"]);
   });
 
   test("existing target file is untouched", async () => {
@@ -132,10 +141,9 @@ describe("apply", () => {
     await write(join(main, ".env"), "SECRET=1\n");
     await write(join(worktree, ".env"), "ALREADY=1\n");
 
-    const report = await apply(main, worktree);
+    const outcome = await apply(main, worktree);
 
-    expect(report.copy).toEqual([]);
-    expect(report.skipped).toEqual([{ path: ".env", reason: "exists" }]);
+    expect(files(outcome)).toEqual([{ tag: "skipped", path: ".env", reason: "exists" }]);
     expect(await readFile(join(worktree, ".env"), "utf8")).toBe("ALREADY=1\n");
   });
 
@@ -145,9 +153,9 @@ describe("apply", () => {
     await commitInitial([".gitignore", ".worktreeinclude"]);
     await write(join(main, ".env"), "SECRET=1\n");
 
-    const report = await apply(main, main);
+    const outcome = await apply(main, main);
 
-    expect(report.copy).toEqual([]);
+    expect(outcome.tag).toBe("is-main");
   });
 
   test("mainWorktreeOf resolves the main checkout from a linked worktree", async () => {

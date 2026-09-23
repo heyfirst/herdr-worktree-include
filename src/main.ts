@@ -1,51 +1,40 @@
-export {};
+import { apply, mainWorktreeOf, type Outcome } from "./apply";
+import { field, parseJson, type Json } from "./json";
 
-await main().catch((err) => {
-  console.error(String(err instanceof Error ? err.stack ?? err.message : err));
-});
+type Mode = "event" | "apply";
+
+await run().then(
+  (outcome) => console.log(JSON.stringify(outcome)),
+  (error) => console.error(`worktree-include: ${error instanceof Error ? error.stack : String(error)}`)
+);
 process.exit(0);
 
-async function main(): Promise<void> {
-  const mode = process.argv[2];
-  if (mode !== "event" && mode !== "apply") {
-    console.error(`worktree-include: unknown mode "${mode ?? ""}"`);
-    return;
-  }
-  const target = mode === "event" ? eventTarget() : applyTarget(process.argv[3]);
-  if (!target) {
-    console.error("worktree-include: could not resolve target path");
-    return;
-  }
+async function run(): Promise<Outcome> {
+  const target = resolveTarget(parseMode(process.argv[2]), process.argv[3]);
+  if (!target) return { tag: "no-target" };
 
-  const { apply, mainWorktreeOf } = await import("./apply");
   const source = await mainWorktreeOf(target);
-  if (!source) {
-    console.error(`worktree-include: could not resolve main worktree for ${target}`);
-    return;
+  if (!source) return { tag: "no-source", target };
+
+  return apply(source, target);
+}
+
+function parseMode(arg: string | undefined): Mode | null {
+  return arg === "event" || arg === "apply" ? arg : null;
+}
+
+function resolveTarget(mode: Mode | null, argvPath: string | undefined): string | null {
+  switch (mode) {
+    case "event":
+      return checkoutPath(field(parseJson(process.env.HERDR_PLUGIN_EVENT_JSON), "data"));
+    case "apply":
+      return checkoutPath(parseJson(process.env.HERDR_PLUGIN_CONTEXT_JSON)) ?? argvPath ?? null;
+    case null:
+      return null;
   }
-
-  const report = await apply(source, target);
-  console.log(JSON.stringify(report));
 }
 
-function eventTarget(): string | null {
-  return checkoutPath(parseJson(process.env.HERDR_PLUGIN_EVENT_JSON)?.data);
-}
-
-function applyTarget(argvPath: string | undefined): string | null {
-  return checkoutPath(parseJson(process.env.HERDR_PLUGIN_CONTEXT_JSON)) ?? argvPath ?? null;
-}
-
-function checkoutPath(scope: any): string | null {
-  const path = scope?.worktree?.checkout_path;
+function checkoutPath(scope: Json | undefined): string | null {
+  const path = field(field(scope, "worktree"), "checkout_path");
   return typeof path === "string" && path.length > 0 ? path : null;
-}
-
-function parseJson(raw: string | undefined): any {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
 }

@@ -1,43 +1,32 @@
+export type SkipReason = "unsafe-path" | "exists" | "other-worktree";
+
+export type Planned = { step: "copy"; path: string } | { step: "skip"; path: string; reason: SkipReason };
+
 export type Facts = {
   candidates: string[];
   existingInTarget: Set<string>;
   otherWorktrees: string[];
 };
 
-export type Skip = { path: string; reason: "unsafe-path" | "exists" | "other-worktree" };
+export function plan(facts: Facts): Planned[] {
+  return facts.candidates.map((path): Planned => {
+    const reason = skipReason(path, facts);
+    return reason ? { step: "skip", path, reason } : { step: "copy", path };
+  });
+}
 
-export type CopyPlan = { copy: string[]; skipped: Skip[] };
-
-export function plan(facts: Facts): CopyPlan {
-  const copy: string[] = [];
-  const skipped: Skip[] = [];
-
-  for (const path of facts.candidates) {
-    if (!isSafeRelativePath(path)) {
-      skipped.push({ path, reason: "unsafe-path" });
-      continue;
-    }
-    if (isUnderOtherWorktree(path, facts.otherWorktrees)) {
-      skipped.push({ path, reason: "other-worktree" });
-      continue;
-    }
-    if (facts.existingInTarget.has(path)) {
-      skipped.push({ path, reason: "exists" });
-      continue;
-    }
-    copy.push(path);
-  }
-
-  return { copy, skipped };
+function skipReason(path: string, facts: Facts): SkipReason | null {
+  if (!isSafeRelativePath(path)) return "unsafe-path";
+  if (isUnderOtherWorktree(path, facts.otherWorktrees)) return "other-worktree";
+  if (facts.existingInTarget.has(path)) return "exists";
+  return null;
 }
 
 function isSafeRelativePath(path: string): boolean {
   if (path.length === 0) return false;
   if (path.startsWith("/")) return false;
   if (path.includes("\0")) return false;
-  const segments = path.split("/");
-  if (segments.includes("..")) return false;
-  return true;
+  return !path.split("/").includes("..");
 }
 
 function isUnderOtherWorktree(path: string, otherWorktrees: string[]): boolean {

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { plan, type Facts, type Skip } from "../src/plan";
+import { plan, type Facts, type SkipReason } from "../src/plan";
+
+type Skip = { path: string; reason: SkipReason };
 
 const baseFacts: Facts = {
   candidates: [],
@@ -81,11 +83,10 @@ describe("plan", () => {
 
   for (const { name, facts, copy, skipped } of cases) {
     test(name, () => {
-      const result = plan(facts);
-      expect(result.copy.sort()).toEqual([...copy].sort());
-      const actualSkipped = result.skipped.map((s) => ({ path: s.path, reason: s.reason }));
-      expect(actualSkipped.sort((a, b) => a.path.localeCompare(b.path))).toEqual(
-        [...skipped].sort((a, b) => a.path.localeCompare(b.path))
+      const planned = plan(facts);
+      expect(planned.flatMap((p) => (p.step === "copy" ? [p.path] : []))).toEqual(copy);
+      expect(planned.flatMap((p) => (p.step === "skip" ? [{ path: p.path, reason: p.reason }] : []))).toEqual(
+        skipped
       );
     });
   }
