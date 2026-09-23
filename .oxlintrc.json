@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": ["dist/"],
-  "plugins": ["typescript"],
+  "plugins": ["typescript", "unicorn"],
   "rules": {
     "typescript/no-explicit-any": "error",
     "typescript/no-restricted-types": [
@@ -10,6 +10,12 @@
         "types": {
           "unknown": {
             "message": "parse with a valibot schema or narrow the type"
+          },
+          "null": {
+            "message": "no null: use a tagged union"
+          },
+          "undefined": {
+            "message": "no undefined: use a tagged union, handle outside undefined on the same line"
           }
         }
       }
@@ -20,6 +26,8 @@
     "typescript/no-unsafe-member-access": "error",
     "typescript/no-unsafe-call": "error",
     "typescript/no-floating-promises": "error",
-    "typescript/switch-exhaustiveness-check": "error"
+    "typescript/switch-exhaustiveness-check": "error",
+    "unicorn/no-null": "error",
+    "eslint/no-undefined": "error"
   }
 }

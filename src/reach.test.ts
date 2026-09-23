@@ -34,12 +34,10 @@ describe("namesDirectory", () => {
 });
 
 describe("groupByIgnoredDir", () => {
-  test("groups paths under their ignored dir, the rest under null", () => {
-    const groups = groupByIgnoredDir(["vendor/a", ".env", "vendor/b/c"], ["vendor/"]);
+  test("groups paths under their ignored dir, the rest as outside", () => {
+    const { outside, byDir } = groupByIgnoredDir(["vendor/a", ".env", "vendor/b/c"], ["vendor/"]);
 
-    expect([...groups]).toEqual([
-      ["vendor/", ["vendor/a", "vendor/b/c"]],
-      [null, [".env"]],
-    ]);
+    expect(outside).toEqual([".env"]);
+    expect([...byDir]).toEqual([["vendor/", ["vendor/a", "vendor/b/c"]]]);
   });
 });

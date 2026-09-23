@@ -9,17 +9,14 @@ export type Facts = {
 };
 
 export function plan(facts: Facts): Planned[] {
-  return facts.candidates.map((path): Planned => {
-    const reason = skipReason(path, facts);
-    return reason ? { step: "skip", path, reason } : { step: "copy", path };
-  });
+  return facts.candidates.map((path) => planOne(path, facts));
 }
 
-function skipReason(path: string, facts: Facts): SkipReason | null {
-  if (!isSafeRelativePath(path)) return "unsafe-path";
-  if (isUnderOtherWorktree(path, facts.otherWorktrees)) return "other-worktree";
-  if (facts.existingInTarget.has(path)) return "exists";
-  return null;
+function planOne(path: string, facts: Facts): Planned {
+  if (!isSafeRelativePath(path)) return { step: "skip", path, reason: "unsafe-path" };
+  if (isUnderOtherWorktree(path, facts.otherWorktrees)) return { step: "skip", path, reason: "other-worktree" };
+  if (facts.existingInTarget.has(path)) return { step: "skip", path, reason: "exists" };
+  return { step: "copy", path };
 }
 
 function isSafeRelativePath(path: string): boolean {

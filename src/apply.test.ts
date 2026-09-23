@@ -254,9 +254,8 @@ describe("apply", () => {
 
     const resolved = await mainWorktreeOf(worktree);
 
-    expect(resolved).not.toBeNull();
     const proc = Bun.spawn(["git", "rev-parse", "--show-toplevel"], { cwd: main, stdout: "pipe" });
     const canonicalMain = (await new Response(proc.stdout).text()).trim();
-    expect(resolved).toBe(canonicalMain);
+    expect(resolved).toEqual({ tag: "found", path: canonicalMain });
   });
 });

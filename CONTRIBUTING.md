@@ -16,7 +16,11 @@ How the pieces fit is in [CONTEXT.md](CONTEXT.md).
 Tests build real git repositories in a temp directory. `src/e2e.test.ts` runs
 the exact command from `herdr-plugin.toml` with a real event payload, so the
 build runs first. Lint bans `any`,
-`unknown` and unsafe access.
+`unknown`, `null`, `undefined` and unsafe access. Our own types and values
+never use `null` or `undefined`: absence is always a tagged union, and a value
+that arrives as `undefined` from outside (`process.env`, `process.argv`,
+`Array.find`, `Map.get`) is handled on the same line with `??` or a guard.
+Every `switch` ends in `default: return assertExhausted(x)`.
 
 ## What gets copied
 
@@ -62,12 +66,12 @@ herdr plugin log list --plugin heyfirst.worktree-include --limit 5
 }
 ```
 
-| `tag`         | Means                                                             |
-| ------------- | ----------------------------------------------------------------- |
-| `applied`     | Ran. Each file is `copied`, `skipped` (with a reason) or `failed` |
-| `no-manifest` | The main checkout has no `.worktreeinclude`                       |
-| `is-main`     | The target is the main checkout itself                            |
-| `no-source`   | Could not find the main checkout                                  |
-| `no-target`   | Could not find the new worktree in the event                      |
+| `tag`         | Means                                                               |
+| ------------- | ------------------------------------------------------------------- |
+| `applied`     | Ran. Each file is `copied`, `skipped` (with a reason) or `failed`   |
+| `no-manifest` | The main checkout has no `.worktreeinclude`                         |
+| `is-main`     | The target is the main checkout itself                              |
+| `no-source`   | Could not find the main checkout                                    |
+| `no-target`   | Could not find the new worktree in the event; names why in `reason` |
 
 A skipped file says why: `exists`, `unsafe-path` or `other-worktree`.
