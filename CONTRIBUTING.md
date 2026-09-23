@@ -4,14 +4,18 @@
 
 ```bash
 bun install
-bun run check        # tsc, oxlint (type-aware), oxfmt, bun test, then build
+bun run check        # tsc, oxlint (type-aware), oxfmt, build, then bun test
 herdr plugin link .  # run your checkout instead of the installed copy
 ```
 
 herdr runs `dist/main.js`, so rebuild after every change and commit `dist/`
 with the source. `bun run check` rebuilds it.
 
-Tests build real git repositories in a temp directory. Lint bans `any`,
+How the pieces fit is in [CONTEXT.md](CONTEXT.md).
+
+Tests build real git repositories in a temp directory. `src/e2e.test.ts` runs
+the exact command from `herdr-plugin.toml` with a real event payload, so the
+build runs first. Lint bans `any`,
 `unknown` and unsafe access.
 
 ## What gets copied
