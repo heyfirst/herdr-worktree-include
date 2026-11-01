@@ -4,23 +4,12 @@
 
 ```bash
 bun install
-bun run check        # tsc, oxlint (type-aware), oxfmt, build, then bun test
-herdr plugin link .  # run your checkout instead of the installed copy
+bun run check        # tsc, oxlint, oxfmt, bun test, herdr-app check
 ```
 
-herdr runs `dist/main.js`, so rebuild after every change and commit `dist/`
-with the source. `bun run check` rebuilds it.
+The mod is plain JavaScript in `mods/worktree-include/`. There is no build. Copy the files to `~/.config/herdr-app/mods/worktree-include/` to run your checkout (the app refuses links). How the pieces fit is in [CONTEXT.md](CONTEXT.md).
 
-How the pieces fit is in [CONTEXT.md](CONTEXT.md).
-
-Tests build real git repositories in a temp directory. `src/e2e.test.ts` runs
-the exact command from `herdr-plugin.toml` with a real event payload, so the
-build runs first. Lint bans `any`,
-`unknown`, `null`, `undefined` and unsafe access. Our own types and values
-never use `null` or `undefined`: absence is always a tagged union, and a value
-that arrives as `undefined` from outside (`process.env`, `process.argv`,
-`Array.find`, `Map.get`) is handled on the same line with `??` or a guard.
-Every `switch` ends in `default: return assertExhausted(x)`.
+Tests build real git repositories in a temp directory: `core.test.js` for the rules, `include.test.js` for the git and copy steps.
 
 ## What gets copied
 
@@ -31,9 +20,7 @@ A file is copied only when **both** are true:
 | It matches `.worktreeinclude`       | You asked for it                          |
 | git ignores it in the main checkout | Tracked files are already in the worktree |
 
-This is the same rule Claude Code uses. git does both checks itself, so
-negation, directory patterns and nested `.gitignore` files work exactly as they
-do in git.
+This is the same rule Claude Code uses. git does both checks itself, so negation, directory patterns and nested `.gitignore` files work exactly as they do in git.
 
 ## Safety rules
 
@@ -42,36 +29,10 @@ do in git.
 - Never copies a path that is absolute or contains `..`.
 - Skips files inside other linked worktrees nested in the main checkout.
 - Recreates symlinks as symlinks, never follows them.
-- Always exits 0, so it can never break worktree creation.
 - Does nothing when there is no `.worktreeinclude`.
 
-Every rule has a test: `src/core/skip-rules.test.ts`, `src/io/copy-includes.test.ts`,
-and `src/e2e.test.ts` for the exit code. A change that loosens a rule needs a reason in
-the commit body.
+Every rule has a test. A change that loosens a rule needs a reason in the commit body.
 
-## Logs
+## Failures
 
-Every run logs one JSON line:
-
-```bash
-herdr plugin log list --plugin heyfirst.worktree-include --limit 5
-```
-
-```json
-{
-  "tag": "applied",
-  "source": "/code/app",
-  "target": "/code/app-fix-login",
-  "files": [{ "tag": "copied", "path": ".env" }]
-}
-```
-
-| `tag`         | Means                                                               |
-| ------------- | ------------------------------------------------------------------- |
-| `applied`     | Ran. Each file is `copied`, `skipped` (with a reason) or `failed`   |
-| `no-manifest` | The main checkout has no `.worktreeinclude`                         |
-| `is-main`     | The target is the main checkout itself                              |
-| `no-source`   | Could not find the main checkout                                    |
-| `no-target`   | Could not find the new worktree in the event; names why in `reason` |
-
-A skipped file says why: `exists`, `unsafe-path` or `other-worktree`.
+A failure raises a Herdr notification. A skipped file is silent: `exists`, `unsafe-path` or `other-worktree`.

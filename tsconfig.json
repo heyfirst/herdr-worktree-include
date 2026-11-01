@@ -8,7 +8,10 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    "noImplicitAny": false
   },
-  "include": ["src"]
+  "include": ["mods/worktree-include/core.js", "mods/worktree-include/include.js"]
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "ignorePatterns": ["dist/"],
+  "ignorePatterns": ["gpui-kit.d.ts"],
   "plugins": ["typescript", "unicorn"],
   "rules": {
     "typescript/no-explicit-any": "error",
@@ -32,37 +32,15 @@
   },
   "overrides": [
     {
-      "files": ["src/core/**"],
+      "files": ["mods/**"],
       "rules": {
-        "eslint/no-restricted-imports": [
-          "error",
-          {
-            "patterns": [
-              {
-                "group": ["node:*", "bun", "bun:*", "../io/*"],
-                "message": "src/core is pure: no I/O. Do it in src/io and pass the result in"
-              }
-            ]
-          }
-        ],
-        "eslint/no-restricted-globals": [
-          "error",
-          {
-            "name": "Bun",
-            "message": "src/core is pure: no I/O"
-          },
-          {
-            "name": "process",
-            "message": "src/core is pure: read argv and env in main.ts"
-          }
-        ]
-      }
-    },
-    {
-      "files": ["src/core/**/*.test.ts"],
-      "rules": {
-        "eslint/no-restricted-imports": "off",
-        "eslint/no-restricted-globals": "off"
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-call": "off",
+        "unicorn/no-null": "off",
+        "eslint/no-undefined": "off"
       }
     }
   ]

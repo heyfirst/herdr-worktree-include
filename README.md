@@ -12,23 +12,29 @@ Claude Code fixed this a long time ago with [`.worktreeinclude`](https://code.cl
 
 ## The fix ✨
 
-I wrote a small plugin that makes herdr read the same `.worktreeinclude`, and now it works the same as `claude -w <name>` does. No more copy-pasta 🍝
+A small [Herdr app](https://herdr.dev) mod. When a new linked-worktree space appears, it reads the same `.worktreeinclude` and copies the files, so it works the same as `claude -w <name>` does. No more copy-pasta 🍝
 
 ## Install 📦
 
-Requirements:
-
-- [herdr](https://herdr.dev) >= 0.9.1
-- Git
-- [Bun](https://bun.sh) on `PATH`
+Requirements: the Herdr app and Git. No Bun, no build.
 
 ```bash
-herdr plugin install heyfirst/herdr-worktree-include
-herdr plugin list    # heyfirst.worktree-include should be listed
+git clone https://github.com/heyfirst/herdr-worktree-include
+mkdir -p ~/.config/herdr-app/mods/worktree-include
+cp herdr-worktree-include/mods/worktree-include/{main,core,include}.js \
+   herdr-worktree-include/mods/worktree-include/mod.json \
+   ~/.config/herdr-app/mods/worktree-include/
 ```
 
-That's it. No install step: herdr runs the prebuilt `dist/main.js`, which
-already bundles its one dependency, [valibot](https://valibot.dev).
+The files are copied, not linked: the app refuses an import that resolves outside the mod folder.
+
+The mod has no window. Add it to your layout as a 0px block so the app runs it:
+
+```json
+{ "id": "worktree-include", "type": "block", "content": { "mod": "worktree-include" }, "size": { "px": 0 } }
+```
+
+See [RECIPE.md](RECIPE.md) for the details.
 
 ## Use 🛠️
 
@@ -67,7 +73,7 @@ already bundles its one dependency, [valibot](https://valibot.dev).
    .claude/settings.local.json
    ```
 
-2. Create a new worktree in herdr, like you always do.
+2. Create a new worktree in the app, or with `git worktree add`. Any new linked worktree works.
 3. That's it. Your `.env` is already there. 🎉
 
 `**/` means "at any depth", so one line covers a whole monorepo:
@@ -85,21 +91,13 @@ Only gitignored files are copied, and nothing already in the worktree gets
 overwritten. Leave out `node_modules/` and build output. They're
 big, and your package manager rebuilds them anyway.
 
-## Why Bun 🥟
+## Why plain JavaScript 🥟
 
-It's just that Bun is always on my machine, personal laptop and work laptop, and TypeScript is my go-to language. So it was a no-brainer here.
-
-TypeScript is also easier to read, understand and reason about than a shell script or Rust. This plugin copies files into my repository, so I should be able to explain it when something goes south. It's about 380 lines of code, and git is _load-bearing_ here anyway (😉😏) hehe.
+The app loads a mod as-is, so there is nothing to build or install. It is a few small files, and git is _load-bearing_ here anyway (😉😏) hehe. Tests run with `bun test`.
 
 ## Not working? 🔍
 
-Every run logs one JSON line saying what it did, or why it did nothing:
-
-```bash
-herdr plugin log list --plugin heyfirst.worktree-include --limit 5
-```
-
-What each result means is in [CONTRIBUTING.md](CONTRIBUTING.md#logs).
+A failed run raises a notification: "worktree-include failed" or "some files were not copied", with the reason. A run that finds nothing to do (no `.worktreeinclude`, not a linked worktree) is silent.
 
 ## Prior art 🙏
 

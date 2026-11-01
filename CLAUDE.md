@@ -9,4 +9,4 @@ Written by an agent setup skill. Rerun it to change a row; do not guess around i
 | Destination  | `home` -- `<frames>/<slug>/` (`<notes>/herdr-worktree-include/frames/<slug>/`)                                                 |
 | LoC budget   | 600                                                                                                                            |
 | Feature gate | `none`                                                                                                                         |
-| Deploy order | `none` -- release: `bun run check`, commit `dist/` with the source, push                                                       |
+| Deploy order | `none` -- release: `bun run check`, copy `mods/worktree-include` into `~/.config/herdr-app/mods/`, push                        |

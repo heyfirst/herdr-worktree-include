@@ -1,7 +1,7 @@
 {
   "name": "herdr-worktree-include",
   "private": true,
-  "description": "herdr plugin that copies .worktreeinclude files into new worktrees. Built with Bun.",
+  "description": "Herdr app mod that copies .worktreeinclude files into new worktrees. Plain JavaScript, no build.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,11 +14,7 @@
     "lint": "oxlint --type-aware",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "check": "tsc --noEmit && oxlint --type-aware && oxfmt --check && bun run build && bun test",
-    "build": "bun build src/main.ts --target bun --minify --outfile dist/main.js"
-  },
-  "dependencies": {
-    "valibot": "1.5.0"
+    "check": "tsc --noEmit && oxlint --type-aware && oxfmt --check && bun test && herdr-app check mods/worktree-include"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
